@@ -163,6 +163,8 @@ void vga_wr(u16 off, u8 v)
         if ((vga.mode & 3) == 3) m &= v;
         *p = (u8)((x & m) | (l & (u8)~m));
     }
+    if (vga.map_mask)                                    /* ENH: coverage of the enhanced view */
+        ega_mark_written(off, (vga.mode & 3) == 1 ? 0xFF : (vga.mode & 3) == 3 ? (u8)(vga.bit_mask & v) : vga.bit_mask);
     ega_touch();
 }
 

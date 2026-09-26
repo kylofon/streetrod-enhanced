@@ -5,6 +5,12 @@
  *   --scale       initial window scale: 320x240 times N (default 3)
  *   --fullscreen  start in full screen (Alt+Enter switches)
  *   --check       load and verify the original executable, print a summary and exit (no window)
+ * enhanced view (ENHANCED.md):
+ *   --classic         the original's picture only
+ *   --res-scale N     output = 320x200 times N, 1..8 (default 4; 1 with --classic)
+ *   --aa N            anti-aliasing, N x N samples per output pixel, 1..4 (default 2)
+ *   --motion-delay N  percent of a game frame the smooth view runs behind the game, 0..100 (default 100)
+ *   --town on|off     enhance the town cruise too (default on)
  *   the original's command-line switches are passed on as they are: 1, nomouse, demo, auto, nouemem
  *   (platform.md §5.1)
  */
@@ -21,6 +27,7 @@
 #include "modules.h"
 #include "platform/ega.h"
 #include "platform/platform.h"
+#include "enhanced/enhanced.h"
 
 #define MAX_GAME_ARGS 16
 
@@ -57,6 +64,8 @@ int main(int argc, char **argv)
     const char *dir = "Game";
     int scale = 3;
     bool check = false, fullscreen = false;
+    bool classic = false, town = true;
+    int res_scale = -1, aa = ENH_DEFAULT_AA, motion_delay = ENH_DEFAULT_MOTION_DELAY;
     char *game_argv[MAX_GAME_ARGS + 1] = { argv[0] };
     int game_argc = 1;
     for (int i = 1; i < argc; i++) {
@@ -65,6 +74,11 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--scale") && v) { scale = atoi(v); i++; }
         else if (!strcmp(a, "--fullscreen")) fullscreen = true;
         else if (!strcmp(a, "--check")) check = true;
+        else if (!strcmp(a, "--classic")) classic = true;
+        else if (!strcmp(a, "--res-scale") && v) { res_scale = atoi(v); i++; }
+        else if (!strcmp(a, "--aa") && v) { aa = atoi(v); i++; }
+        else if (!strcmp(a, "--motion-delay") && v) { motion_delay = atoi(v); i++; }
+        else if (!strcmp(a, "--town") && v) { town = strcmp(v, "off") != 0; i++; }
         else if (a[0] == '-' && a[1] == '-') return usage(argv[0]);
         else if (game_argc < MAX_GAME_ARGS) game_argv[game_argc++] = argv[i];
     }
@@ -83,6 +97,8 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    if (res_scale < 0) res_scale = classic ? 1 : ENH_DEFAULT_RES_SCALE;
+    enh_init(!classic, res_scale, aa, motion_delay, town);
     if (!host_init(dir, scale, fullscreen)) return 1;
     ega_init();                     /* 16-colour planar display: frame source, planes */
     modules_init();                 /* hooks into subsystems ported separately (modules.h) */

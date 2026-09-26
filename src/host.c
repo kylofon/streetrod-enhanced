@@ -20,7 +20,7 @@ static void (*tick_handler)(void);
 static void (*kbd_handler)(u8);
 static void (*focus_lost_handler)(void);
 static bool (*frame_source)(u32 *);
-static u32 frame[HOST_FRAME_MAX_W * HOST_FRAME_MAX_H];
+static u32 *frame;                      /* frame_w x frame_h */
 static int frame_w = 320, frame_h = 200;
 #define VIEW_W(w) (w)                   /* logical presentation: frame width x 3/4 of it (4:3) */
 #define VIEW_H(w) ((w) * 3 / 4)
@@ -101,11 +101,15 @@ void host_set_frame_source(bool (*compose)(u32 *), int w, int h)
     frame_source = compose;
     frame_w = SDL_clamp(w, 1, HOST_FRAME_MAX_W);
     frame_h = SDL_clamp(h, 1, HOST_FRAME_MAX_H);
+    SDL_free(frame);
+    frame = SDL_calloc((size_t)frame_w * frame_h, sizeof *frame);
+    if (!frame) host_fatal("out of memory for a %dx%d frame", frame_w, frame_h);
     /* The 200-line picture fills a 4:3 area, as it did on a VGA monitor. */
     SDL_SetRenderLogicalPresentation(renderer, VIEW_W(frame_w), VIEW_H(frame_w), SDL_LOGICAL_PRESENTATION_LETTERBOX);
     if (texture) SDL_DestroyTexture(texture);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, frame_w, frame_h);
-    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+    /* ENH: a high-resolution frame is filtered when the window is not an exact multiple of it */
+    SDL_SetTextureScaleMode(texture, frame_w > 320 ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 }
 
 static Uint64 tick_due_ns(Uint64 n)
@@ -682,8 +686,8 @@ static void process_events(void)
                 float vw = (float)ww, vh = (float)wh;
                 if (vw * 3 > vh * 4) vw = vh * 4 / 3; else vh = vw * 3 / 4;
                 if (vw >= 1 && vh >= 1) {
-                    mickey_x += ev.motion.xrel * 2.0f * (float)frame_w / vw;
-                    mickey_y += ev.motion.yrel * 2.0f * (float)frame_h / vh;
+                    mickey_x += ev.motion.xrel * 2.0f * 320.0f / vw;
+                    mickey_y += ev.motion.yrel * 2.0f * 200.0f / vh;
                 }
             }
             SDL_ConvertEventToRenderCoordinates(renderer, &ev);
@@ -713,8 +717,8 @@ void host_mouse_read(s16 *x, s16 *y, u8 *buttons)
     /* Logical presentation is 320 x 240 (4:3); the game's screen is 320 x 200. */
     float px = SDL_clamp(mouse_x, 0.0f, (float)VIEW_W(frame_w) - 1);
     float py = SDL_clamp(mouse_y, 0.0f, (float)VIEW_H(frame_w) - 1);
-    if (x) *x = (s16)(px * frame_w / VIEW_W(frame_w));
-    if (y) *y = (s16)(py * frame_h / VIEW_H(frame_w));
+    if (x) *x = (s16)(px * 320 / VIEW_W(frame_w));
+    if (y) *y = (s16)(py * 200 / VIEW_H(frame_w));
     SDL_MouseButtonFlags b = SDL_GetMouseState(NULL, NULL);
     if (buttons) *buttons = (u8)(((b & SDL_BUTTON_LMASK) ? 1 : 0) | ((b & SDL_BUTTON_RMASK) ? 2 : 0) | script_buttons);
 }

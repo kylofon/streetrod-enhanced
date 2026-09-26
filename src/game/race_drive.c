@@ -7,6 +7,7 @@
  * road_frame busy-waits until RACE_TICKS_PER_FRAME (9) ticks of the 72.8 Hz timer have passed since
  * the frame's start, pumping the host; the player physics runs in the race ISR (platform race_isr ->
  * modules.race_phys_step) on every 12th tick. */
+#include "enhanced/enhanced.h"
 #include "game/race.h"
 #include "game/race_int.h"
 #include "game/garage.h"
@@ -223,6 +224,7 @@ s16 race_run(void)
     } else {
         DSB(0x824A) = 0;
     }
+    enh_race_begin();                                              /* ENH: the enhanced view on */
     road_race_init();                                              /* 2645:2114 */
     drv_pal_normal();                                              /* (*DS:78C2)() */
     for (;;) {
@@ -241,6 +243,7 @@ s16 race_run(void)
             DSS(DS_wheel_shown) = w;
         }
     }
+    enh_race_end();                                                /* ENH: the enhanced view off */
     arena_reset();
     /* VGA: the dashboard under the last road frame in the shown page, split off, all pages alike */
     FarPtr shown = DSW(DS_back_page) == 1 ? ds_far(DS_page2_ptr) : ds_far(DS_page1_ptr);

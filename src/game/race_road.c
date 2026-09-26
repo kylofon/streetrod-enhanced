@@ -19,6 +19,7 @@
 #include "platform/platform.h"
 #include "platform/video.h"
 #include "host.h"
+#include "enhanced/enhanced.h"
 
 /* ================================================================================ DGROUP names */
 
@@ -239,6 +240,7 @@ static void road_page_flip(void)
         DSS(DS_shown_page) = t;
         DSW(DS_g_draw_seg) = DSS(DS_back_page) == 1 ? 0xA200 : 0xA400;
         ega_show_page(DSS(DS_shown_page));
+        enh_frame_presented();                              /* ENH: the road frame is shown */
     } else {                                                /* other drivers (parked): copy the view */
         Rect r;
         r.w = DSS(DS_view_copy_rect + 0);  r.h = DSS(DS_view_copy_rect + 2);
@@ -261,6 +263,7 @@ static void road_frame(void)
     road_set_seg_ptrs(DSS(DS_seg));
     road_project_mirror();
     road_set_seg_ptrs(DSS(DS_seg));
+    enh_frame_built();                                      /* ENH: snapshot of the frame's state */
     /* PORT: the tick count of the frame lock is the named constant RACE_TICKS_PER_FRAME (race.h) */
     u32 until = DSL(DS_ticks) + RACE_TICKS_PER_FRAME;
     road_draw_frame();
