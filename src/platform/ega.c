@@ -11,6 +11,8 @@ static int line_compare = 200;
 static bool dirty = true;
 static u8 written[EGA_PLANE_SIZE];     /* ENH: pixels (bit 7 = leftmost) written since ega_clear_written */
 static int scale = 1;                  /* ENH: output = 320x200 times this */
+static u8 fg[EGA_PLANE_SIZE];          /* ENH: pixels of the foreground layer (see ega_set_layer) */
+static int layer;
 /* Mode 0Dh defaults after INT 10h AH=0 (200-line values), overscan 0. */
 static u8 palette_reg[17] = { 0, 1, 2, 3, 4, 5, 6, 7, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0 };
 
@@ -89,7 +91,18 @@ u8 ega_get_palette_reg(int reg)
 }
 
 /* ENH: written mask (enhanced.c coverage) */
-void ega_mark_written(u16 offset, u8 pixels) { written[offset] |= pixels; }
+void ega_mark_written(u16 offset, u8 pixels)
+{
+    written[offset] |= pixels;
+    if (layer == EGA_LAYER_FG) fg[offset] |= pixels;
+    else if (layer == EGA_LAYER_BG) fg[offset] &= (u8)~pixels;
+}
+void ega_set_layer(int l) { layer = l; }
+const u8 *ega_fg(void) { return fg; }
+void ega_clear_fg(u16 offset, u16 n)
+{
+    for (u16 i = 0; i < n; i++) fg[(u16)(offset + i)] = 0;
+}
 const u8 *ega_written(void) { return written; }
 void ega_clear_written(u16 offset, u16 n)
 {

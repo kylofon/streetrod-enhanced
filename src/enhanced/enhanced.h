@@ -28,6 +28,13 @@ void enh_race_end(void);
 
 /* road_frame (race_road.c), after the projection: the frame's state becomes the newest snapshot. */
 void enh_frame_built(void);
+/* road_draw_frame (race_road.c): what the engine draws next into the back page is replaced by the enhanced
+ * view (bg: sky, ground, road bands) or stays the original's picture (fg: road-side objects, the opponent,
+ * the town walls, the mirror, the cockpit), until the enhanced renderer draws those too. begin = a new
+ * frame into the back page (all its marks cleared, background). */
+void enh_draw_begin(void);
+void enh_draw_fg(bool fg);
+
 /* road_page_flip (race_road.c): the frame just drawn is now the shown page. */
 void enh_frame_presented(void);
 

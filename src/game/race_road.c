@@ -1067,8 +1067,10 @@ static void town_walls_front_right(void)
 static void road_draw_row_front(s16 row)
 {
     if (DSW(DS_racing) == 0) {
+        enh_draw_fg(true);                                  /* ENH: town walls: the original's */
         town_walls_front_left();
         town_walls_front_right();
+        enh_draw_fg(false);
     }
     road_draw_band_front(row);
 }
@@ -1428,10 +1430,12 @@ static void road_draw_frame(void)
     ds_far_wr(DS_right_ptr, far_add(ds_far(DS_seg_right_ptr), 0x1C));
     ds_far_wr(DS_centre_ptr, far_add(ds_far(DS_seg_centre_ptr), 0x1C));
     clip_set_view();
+    enh_draw_begin();                                       /* ENH: sky, ground, bands: enhanced */
     road_draw_sky();
     setreset_on();
     for (s16 row = 14; row != 0; row--) {
         if (row <= DSS(DS_top_band_row)) road_draw_row_front(row);
+        enh_draw_fg(true);                                  /* ENH: objects, opponent: the original's */
         if (!(fword(DS_centre_ptr, 0) & 4) && row < 11)
             draw_row_objects_front(row);
         if (sub16(DSS(DS_opp_seg), DSS(DS_seg)) == row && DSW(DS_racing) != 0) {
@@ -1439,11 +1443,13 @@ static void road_draw_frame(void)
             opponent_draw();
             setreset_on();
         }
+        enh_draw_fg(false);
         row_ptrs_step();
         fadv(DS_left_ptr, -2);
         fadv(DS_right_ptr, -2);
         fadv(DS_centre_ptr, -2);
     }
+    enh_draw_fg(true);                                      /* ENH: the rest: the original's */
     if (DSS(DS_opp_seg) == DSS(DS_seg) && DSW(DS_racing) != 0) {
         setreset_off();
         opponent_draw();

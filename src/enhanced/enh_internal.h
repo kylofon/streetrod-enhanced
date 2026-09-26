@@ -36,3 +36,19 @@ typedef struct {
 } EnhView;
 
 bool enh_view_at(Uint64 now_ns, EnhView *v);
+
+/* enh_raster.c: samples of the view rows ENH_VIEW_Y0..Y1, sa = res scale x aa per original pixel. */
+typedef struct {
+    int w, h, sa;
+    u8 *px;                    /* palette indices */
+} EnhBuf;
+extern EnhBuf enh_buf;
+void enh_buf_setup(void);
+void enh_fill_rows(double y0, double y1, u8 c);                  /* original screen rows [y0, y1) */
+void enh_fill_poly(const double *xs, const double *ys, int n, u8 c);
+/* Output rows ENH_VIEW_Y0..y_end of xrgb (320*S wide): the samples resolved through pal, except where the
+ * EGA page at plane offset `page` has written or foreground pixels. */
+void enh_resolve(u32 *xrgb, const u32 *pal, int npal, u16 page, int y_end);
+
+/* enh_road.c */
+void enh_draw_road(const EnhView *v);

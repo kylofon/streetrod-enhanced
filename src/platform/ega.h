@@ -35,6 +35,12 @@ u8   ega_get_palette_reg(int reg);
 void ega_mark_written(u16 offset, u8 pixels);
 const u8 *ega_written(void);
 void ega_clear_written(u16 offset, u16 n);
+/* ENH: layers of a road frame. While the layer is FG, written pixels are marked foreground; while BG, they
+ * are unmarked (a later background write covers an earlier foreground pixel). OFF leaves the marks. */
+enum { EGA_LAYER_OFF, EGA_LAYER_BG, EGA_LAYER_FG };
+void ega_set_layer(int layer);
+const u8 *ega_fg(void);
+void ega_clear_fg(u16 offset, u16 n);
 u16  ega_start(void);                        /* current CRTC start address */
 int  ega_line_compare(void);                 /* current first row from offset 0 (200 = off) */
 

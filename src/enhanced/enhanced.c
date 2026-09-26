@@ -30,7 +30,7 @@ void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town)
     enh_opt.motion_delay = SDL_clamp(motion_delay, 0, 100);
     enh_opt.town = town;
     const char *t = SDL_getenv("SR_ENH_TRACE");
-    if (enabled && t && *t) trace = fopen(t, "w");
+    if (enabled && t && *t && (trace = fopen(t, "w")) != NULL) setvbuf(trace, NULL, _IOLBF, 4096);
 }
 
 bool enh_enabled(void) { return enh_opt.enabled; }
@@ -45,6 +45,7 @@ void enh_race_begin(void)
 
 void enh_race_end(void)
 {
+    ega_set_layer(EGA_LAYER_OFF);
     active = false;
     presented = false;
     nsnaps = 0;
@@ -73,9 +74,23 @@ void enh_frame_built(void)
     if (nsnaps < 3) nsnaps++;
 }
 
+void enh_draw_begin(void)
+{
+    if (!active) return;
+    u16 page = DSS(DS_back_page) == 1 ? 0x2000 : 0x4000;
+    ega_clear_fg(page, ENH_VIEW_Y1 * EGA_BYTES_PER_LINE);
+    ega_set_layer(EGA_LAYER_BG);
+}
+
+void enh_draw_fg(bool fg)
+{
+    if (active) ega_set_layer(fg ? EGA_LAYER_FG : EGA_LAYER_BG);
+}
+
 void enh_frame_presented(void)
 {
     if (!active) return;
+    ega_set_layer(EGA_LAYER_OFF);
     /* The page drawn by road_draw_frame is shown: its view rows are the road frame. Whatever is written
      * there from now on (messages, the start light, the results) stays the original's picture. */
     shown_start = (u16)(DSS(DS_shown_page) * 0x2000);
@@ -132,12 +147,16 @@ bool enh_compose(u32 *xrgb, const u32 rgb[16])
     if (!active || !presented || ega_start() != shown_start) return false;
     EnhView v;
     if (!enh_view_at(SDL_GetTicksNS(), &v)) return false;
+    Uint64 t0 = SDL_GetTicksNS();
+    enh_draw_road(&v);
+    int y_end = SDL_min(ENH_VIEW_Y1, ega_line_compare());
+    enh_resolve(xrgb, rgb, 16, shown_start, y_end);
     if (trace) {
         static double last_pos;
-        fprintf(trace, "%llu pos %.4f d %.4f lat %.1f rh %.2f opp %.3f\n",
-                (unsigned long long)SDL_GetTicksNS(), v.pos, v.pos - last_pos, v.lat, v.rel_heading, v.opp_pos);
+        fprintf(trace, "%llu pos %.4f d %.4f lat %.1f rh %.2f opp %.3f ms %.2f\n",
+                (unsigned long long)t0, v.pos, v.pos - last_pos, v.lat, v.rel_heading, v.opp_pos,
+                (SDL_GetTicksNS() - t0) / 1e6);
         last_pos = v.pos;
     }
-    (void)xrgb; (void)rgb;
-    return true;               /* nothing drawn yet: keep presenting at the display rate */
+    return true;
 }
