@@ -239,8 +239,9 @@ static void road_page_flip(void)
         DSS(DS_back_page) = DSS(DS_shown_page);
         DSS(DS_shown_page) = t;
         DSW(DS_g_draw_seg) = DSS(DS_back_page) == 1 ? 0xA200 : 0xA400;
+        enh_frame_presented();                              /* ENH: the road frame is shown (the host
+                                                               presents during the retrace wait) */
         ega_show_page(DSS(DS_shown_page));
-        enh_frame_presented();                              /* ENH: the road frame is shown */
     } else {                                                /* other drivers (parked): copy the view */
         Rect r;
         r.w = DSS(DS_view_copy_rect + 0);  r.h = DSS(DS_view_copy_rect + 2);
