@@ -21,6 +21,10 @@ wxString LauncherDir();
 wxString DefaultGameDir();
 wxString DefaultProgram();
 
+// True if `path` is a DOS program (MZ without a Windows PE header), such as the original SR.EXE: Windows
+// can't start it, and it isn't the port.
+bool IsDosProgram(const wxString& path);
+
 struct GameOptions {
     wxString program;       // streetrod-enhanced(.exe)
     wxString gameDir;       // --game-dir

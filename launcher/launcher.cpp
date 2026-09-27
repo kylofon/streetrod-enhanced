@@ -247,7 +247,8 @@ wxString LauncherDialog::PlayFolder() const {
 void LauncherDialog::UpdateState() {
     const wxString dir = folder_->GetValue(), program = program_->GetValue();
     game_ = ReadGameFolder(dir);
-    const bool haveProgram = wxFileName::FileExists(program);
+    const bool dosProgram = IsDosProgram(program);
+    const bool haveProgram = wxFileName::FileExists(program) && !dosProgram;
 
     // The data disk choice: only when the folder has a complete datadisk folder.
     const bool diskChoice = game_.missing.empty() && !game_.dataDisk.empty();
@@ -269,6 +270,9 @@ void LauncherDialog::UpdateState() {
     wxString note;
     if (!game_.missing.empty())
         note = wxString::Format("This folder needs the game's files: %s is missing.", game_.missing);
+    else if (dosProgram)
+        note = wxString::Format("%s is the original DOS game. Program should be streetrod-enhanced.exe.",
+                                wxFileName(program).GetFullName());
     else if (!haveProgram)
         note = wxString::Format("%s isn't there.", wxFileName(program).GetFullName());
     else

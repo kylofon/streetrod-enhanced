@@ -1,6 +1,8 @@
 // game.cpp -- the files the game needs, the data disk, saved games and starting the game.
 #include "game.h"
 
+#include <wx/file.h>
+
 #include <wx/filename.h>
 #include <wx/log.h>
 #include <wx/stdpaths.h>
@@ -57,9 +59,26 @@ wxString DefaultProgram() {
     return name.GetFullPath();
 }
 
+bool IsDosProgram(const wxString& path) {
+    wxFile f;
+    if (!wxFileName::FileExists(path) || !f.Open(path)) return false;
+    unsigned char h[0x40] = {};
+    if (f.Read(h, sizeof h) != (ssize_t)sizeof h || h[0] != 'M' || h[1] != 'Z') return false;
+    const wxFileOffset pe = h[0x3C] | h[0x3D] << 8 | h[0x3E] << 16 | (wxFileOffset)h[0x3F] << 24;
+    unsigned char sig[4] = {};
+    if (pe <= 0 || pe >= f.Length() - 4 || f.Seek(pe) != pe || f.Read(sig, 4) != 4) return true;
+    return !(sig[0] == 'P' && sig[1] == 'E' && sig[2] == 0 && sig[3] == 0);
+}
+
 bool LaunchGame(const GameOptions& o, wxString& error) {
     if (!wxFileName::FileExists(o.program)) {
         error = wxString::Format("The game's program isn't there:\n\n%s", o.program);
+        return false;
+    }
+    if (IsDosProgram(o.program)) {
+        error = wxString::Format("%s is the original DOS game, which Windows can't run. The program to start "
+                                 "is streetrod-enhanced.exe:\n\n%s", wxFileName(o.program).GetFullName(),
+                                 DefaultProgram());
         return false;
     }
     std::vector<wxString> args{o.program,
