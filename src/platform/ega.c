@@ -91,10 +91,12 @@ u8 ega_get_palette_reg(int reg)
 }
 
 /* ENH: written mask (enhanced.c coverage) */
-void ega_mark_written(u16 offset, u8 pixels)
+void ega_mark_written(u16 offset, u8 pixels, u8 changed)
 {
     written[offset] |= pixels;
-    if (layer == EGA_LAYER_FG) fg[offset] |= pixels;
+    /* The foreground takes only the pixels a write changed: masked blits (the cockpit, the sprites)
+     * rewrite whole bytes with the background kept in the transparent pixels. */
+    if (layer == EGA_LAYER_FG) fg[offset] |= changed;
     else if (layer == EGA_LAYER_BG) fg[offset] &= (u8)~pixels;
 }
 void ega_set_layer(int l) { layer = l; }

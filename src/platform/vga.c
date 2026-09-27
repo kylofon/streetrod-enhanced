@@ -134,6 +134,8 @@ u8 vga_rd(u16 off)
 
 void vga_wr(u16 off, u8 v)
 {
+    u8 before[4];                                        /* ENH: which pixels changed colour */
+    for (int k = 0; k < 4; k++) before[k] = ega_plane(k)[off];
     for (int k = 0; k < 4; k++) {
         if (!(vga.map_mask >> k & 1)) continue;
         u8 *p = &ega_plane(k)[off];
@@ -163,8 +165,12 @@ void vga_wr(u16 off, u8 v)
         if ((vga.mode & 3) == 3) m &= v;
         *p = (u8)((x & m) | (l & (u8)~m));
     }
-    if (vga.map_mask)                                    /* ENH: coverage of the enhanced view */
-        ega_mark_written(off, (vga.mode & 3) == 1 ? 0xFF : (vga.mode & 3) == 3 ? (u8)(vga.bit_mask & v) : vga.bit_mask);
+    if (vga.map_mask) {                                  /* ENH: coverage of the enhanced view */
+        u8 changed = 0;
+        for (int k = 0; k < 4; k++) changed |= (u8)(before[k] ^ ega_plane(k)[off]);
+        ega_mark_written(off, (vga.mode & 3) == 1 ? 0xFF : (vga.mode & 3) == 3 ? (u8)(vga.bit_mask & v) : vga.bit_mask,
+                         changed);
+    }
     ega_touch();
 }
 

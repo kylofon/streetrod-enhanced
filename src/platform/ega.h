@@ -31,8 +31,9 @@ void ega_set_palette_reg(int reg, u8 value);
 u8   ega_get_palette_reg(int reg);
 
 /* ENH: which pixels the CPU wrote (vga_wr), for the enhanced view's coverage (enhanced.c). Byte o holds
- * the 8 pixels of plane offset o, bit 7 = leftmost; set on every write whatever the value. */
-void ega_mark_written(u16 offset, u8 pixels);
+ * the 8 pixels of plane offset o, bit 7 = leftmost; set on every write whatever the value. `changed` = the
+ * pixels whose colour the write changed (the foreground layer takes only those). */
+void ega_mark_written(u16 offset, u8 pixels, u8 changed);
 const u8 *ega_written(void);
 void ega_clear_written(u16 offset, u16 n);
 /* ENH: layers of a road frame. While the layer is FG, written pixels are marked foreground; while BG, they
