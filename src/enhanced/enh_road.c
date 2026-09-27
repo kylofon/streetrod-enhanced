@@ -34,6 +34,7 @@
 #define Y_ROAD       0x7D0     /* world heights: the road, the eye (the top of a façade) */
 #define Y_EYE        0x76C
 #define OBJ_ROWS     10        /* road-side objects: the original's rows 1..10 */
+#define SKY_SCROLL   0.125     /* the sky and horizon scroll this fraction of the original's (heading x2, x4) */
 
 typedef struct {
     int base;                  /* segment the relative yaw / height are measured from */
@@ -146,8 +147,8 @@ static void draw_sky(const Cam *c, bool town, double *ground_y)
     double heading = (s16)trk(TRK_YAW, c->base) + c->hv;
     for (int j = 0; j < b->h; j++) {
         double y = ENH_VIEW_Y0 + (j + 0.5) / b->sa;
-        if (y < hy - 12) sheet_row(j, (int)floor(y + 0xA6 - hy), 2.0 * heading);
-        else if (y < hy + 8) sheet_row(j, 0xA3 + (int)floor(y - (hy - 12)), 4.0 * heading);
+        if (y < hy - 12) sheet_row(j, (int)floor(y + 0xA6 - hy), 2.0 * SKY_SCROLL * heading);
+        else if (y < hy + 8) sheet_row(j, 0xA3 + (int)floor(y - (hy - 12)), 4.0 * SKY_SCROLL * heading);
         else { enh_fill_rows(y - 0.5 / b->sa, ENH_VIEW_Y1, COL_GRASS); break; }
     }
     *ground_y = hy + 8;
@@ -238,12 +239,10 @@ static ObjRow obj_row(const Cam *c, int n)
 }
 
 /* The original draws the size made for its row (size 9 - row, the largest for rows 1..3); the enhanced
- * view takes the size made for the nearest row at or in front of the object and scales it by depth. */
+ * view always takes the largest (most detailed) size and scales it by depth. */
 static int size_for(double z, int nsizes, double *f)
 {
-    int k = 9 - (int)floor(z / 8.0);
-    if (k > nsizes - 1) k = nsizes - 1;
-    if (k < 0) k = 0;
+    int k = nsizes - 1;
     *f = 8.0 * (9 - k) / z;
     return k;
 }
