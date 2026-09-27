@@ -17,6 +17,8 @@ void host_set_tick_handler(void (*handler)(void));
 /* PIT channel 0 divisor (0 = 65536), as the original programs ports 43h/40h. Ticks run at
  * PIT_HZ / divisor from the last tick on; the default is PIT_DIV_GAME. */
 void host_set_pit_divisor(u16 divisor);
+/* ENH: host time (SDL_GetTicksNS scale) at which the last timer tick run was due. */
+uint64_t host_tick_time_ns(void);
 
 /* Source of the displayed image: fills a w x h XRGB8888 frame and returns true if it changed since the
  * last call. Installed by the EGA/VGA model (platform/ega.c, 320x200 16 colours, ENH: times the

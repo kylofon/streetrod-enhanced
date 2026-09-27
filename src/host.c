@@ -117,6 +117,8 @@ static Uint64 tick_due_ns(Uint64 n)
     return clock_start_ns + n * pit_div * SDL_NS_PER_SECOND / PIT_HZ;
 }
 
+uint64_t host_tick_time_ns(void) { return tick_due_ns(ticks_run); }
+
 void host_set_pit_divisor(u16 divisor)
 {
     u32 d = divisor ? divisor : 0x10000u;

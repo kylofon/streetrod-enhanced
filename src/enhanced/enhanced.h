@@ -28,6 +28,10 @@ void enh_race_end(void);
 
 /* road_frame (race_road.c), after the projection: the frame's state becomes the newest snapshot. */
 void enh_frame_built(void);
+/* race_phys_step (race_phys.c), after player_advance / opp_advance_steer: the cars' positions along the
+ * road moved (every 12th tick in a race, not in step with the frames). */
+void enh_phys_step(void);
+
 /* road_draw_frame (race_road.c): what the engine draws next into the back page is replaced by the enhanced
  * view (bg: sky, ground, road bands) or stays the original's picture (fg: road-side objects, the opponent,
  * the town walls, the mirror, the cockpit), until the enhanced renderer draws those too. begin = a new

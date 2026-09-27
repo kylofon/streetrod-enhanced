@@ -15,23 +15,17 @@ typedef struct {
 } EnhOptions;
 extern EnhOptions enh_opt;
 
-/* One game frame's state, taken in road_frame after the projection. */
+/* The newest frame's state that is not interpolated. */
 typedef struct {
-    Uint64 t_ns;               /* host time when the frame was built */
-    double pos;                /* segment + sub-step / 8 */
-    s16 lat;                   /* camera x (DS:7D36) */
-    s16 heading;               /* DS:7D3C */
-    s16 rel_heading;           /* heading - YAW[segment]: the steering part, interpolated */
     s16 height;                /* DS:7D3E */
-    double opp_pos;            /* opponent (or police) segment + fraction / 8 */
-    s16 opp_lat;
+    s16 opp_sprite;            /* DS:7D7C after the frame was drawn: the opponent's view */
     bool town;                 /* the town cruise (DS:8ACA = 0) */
 } EnhSnap;
 
 /* The smooth view at a moment: the road-curve part of the heading comes from YAW at pos. */
 typedef struct {
     double pos, lat, rel_heading, opp_pos, opp_lat;
-    s16 height;
+    s16 height, opp_sprite;
     bool town;
 } EnhView;
 
@@ -52,3 +46,12 @@ void enh_resolve(u32 *xrgb, const u32 *pal, int npal, u16 page, int y_end);
 
 /* enh_road.c */
 void enh_draw_road(const EnhView *v);
+
+/* enh_sprite.c: palette-index images, ENH_CLEAR = transparent. */
+#define ENH_CLEAR 0xFF
+typedef struct { int w, h; u8 *px; } EnhImage;
+void enh_images_reset(void);
+const EnhImage *enh_image_bitmap(u16 seg, u16 off);
+const EnhImage *enh_image_vram(u16 page, int x, int y, int w, int h);
+void enh_draw_image(const EnhImage *img, double x0, double y0, double x1, double y1);
+void enh_fill_rect(double x0, double y0, double x1, double y1, u8 c);

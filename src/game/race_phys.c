@@ -12,6 +12,7 @@
  * the emulator) in the original order; values the original stores to a double (fstp qword) are
  * rounded to double at the same points. The constants are read from their DGROUP doubles. */
 #include "game/race.h"
+#include "enhanced/enhanced.h"
 #include "game/race_int.h"
 
 #include <string.h>
@@ -811,6 +812,7 @@ void race_step(void)
     }
     player_advance();
     opp_advance_steer();
+    enh_phys_step();                                               /* ENH: the cars moved */
     if (DSS(DS_seg) >= DSS(DS_track_end) || DSS(DS_opp_seg) >= DSS(DS_track_end)) finish_stats();
     if (DSW(DS_player_result) != 0 || DSW(DS_opp_result) != 0) {
         if (DSS(DS_police_state) >= 2) {
