@@ -86,8 +86,8 @@ void enh_draw_image(const EnhImage *img, double x0, double y0, double x1, double
     bool flip = x1 < x0;
     double l = flip ? x1 : x0, r = flip ? x0 : x1;
     double sl = l * b->sa, sr = r * b->sa, st = (y0 - ENH_VIEW_Y0) * b->sa, sb = (y1 - ENH_VIEW_Y0) * b->sa;
-    int i0 = SDL_max(0, (int)ceil(sl - 0.5)), i1 = SDL_min(b->w, (int)ceil(sr - 0.5));
-    int j0 = SDL_max(0, (int)ceil(st - 0.5)), j1 = SDL_min(b->h, (int)ceil(sb - 0.5));
+    int i0 = SDL_max(b->cx0, (int)ceil(sl - 0.5)), i1 = SDL_min(b->cx1, (int)ceil(sr - 0.5));
+    int j0 = SDL_max(b->cy0, (int)ceil(st - 0.5)), j1 = SDL_min(b->cy1, (int)ceil(sb - 0.5));
     double du = img->w / (sr - sl), dv = img->h / (sb - st);
     for (int j = j0; j < j1; j++) {
         int v = (int)((j + 0.5 - st) * dv);

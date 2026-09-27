@@ -1451,8 +1451,8 @@ static void road_draw_frame(void)
         opponent_draw();
         setreset_on();
     }
-    enh_draw_fg(true);                                      /* ENH: the mirror, the cockpit: the original's */
     road_draw_mirror();
+    enh_draw_fg(true);                                      /* ENH: the cockpit, the start light: the original's */
     setreset_off();
     road_draw_cockpit_overlay();
     if (DSW(DS_racing) != 0) road_draw_start_light();

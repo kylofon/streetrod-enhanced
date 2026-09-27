@@ -65,7 +65,7 @@ static void edges(u16 cm, double *xl, double *xr)
     else                { *xl = 0x5DC; *xr = 0xAF0; }
 }
 
-typedef struct { double z, dx, dy; } Row;
+typedef struct { double z, dx, dy; bool mirror; } Row;
 
 static Row row_at(const Cam *c, double s)
 {
@@ -73,10 +73,35 @@ static Row row_at(const Cam *c, double s)
     r.z = 8.0 * (s - c->pos) + 4.0;
     r.dx = c->hv - interp(c, s, yaw_rel);
     r.dy = c->hpos - interp(c, s, hgt_rel);
+    r.mirror = false;
     return r;
 }
-static double px(const Cam *c, const Row *r, double X) { return 160.0 - 4.0 * (c->lat - (X + r->z * r->dx / 4.0)) / r->z; }
-static double py(const Row *r, double Y) { return 4.0 * (Y + r->z * r->dy - 0x76C) / r->z + 60.0; }
+
+/* The mirror (road_proj_x_mirror / road_proj_y_mirror): the road behind, row k of the original at depth
+ * substep + 8k, the signs of the heading and height differences reversed, centre 118h, horizon 24h, and
+ * a quarter of the front view's scale. */
+static Row row_at_mirror(const Cam *c, double s)
+{
+    Row r;
+    r.z = 8.0 * (c->pos - s);
+    r.dx = interp(c, s, yaw_rel) - c->hv;
+    r.dy = interp(c, s, hgt_rel) - c->hpos;
+    r.mirror = true;
+    return r;
+}
+
+static double px(const Cam *c, const Row *r, double X)
+{
+    if (r->mirror) return 0x118 - (c->lat - (X + r->z * r->dx / 4.0)) / r->z;
+    return 160.0 - 4.0 * (c->lat - (X + r->z * r->dx / 4.0)) / r->z;
+}
+static double py(const Row *r, double Y)
+{
+    if (r->mirror) return (Y + r->z * r->dy - 0x76C) / r->z + 0x24;
+    return 4.0 * (Y + r->z * r->dy - 0x76C) / r->z + 60.0;
+}
+/* the depth that sizes a road-side object: the mirror's quarter scale is four times as far */
+static double size_depth(const Row *r) { return r->mirror ? 4.0 * r->z : r->z; }
 
 /* world x of a road line at s: the vertex at segment m has the edges of C[m], linear between */
 static void edges_at(double s, double *xl, double *xr)
@@ -222,11 +247,11 @@ static void draw_slice(const Cam *c, double sa, double sb, bool town)
 /* A row of the original at segment n: the projected road lines (the race_road.c row tables). */
 typedef struct { Row r; double xl, xr, xol, xor_, y, ye; int n; } ObjRow;
 
-static ObjRow obj_row(const Cam *c, int n)
+static ObjRow obj_row(const Cam *c, int n, bool mirror)
 {
     ObjRow o;
     o.n = n;
-    o.r = row_at(c, n);
+    o.r = mirror ? row_at_mirror(c, n) : row_at(c, n);
     double l, r;
     edges(trk(TRK_C, n), &l, &r);
     o.xl = px(c, &o.r, l);
@@ -287,7 +312,7 @@ static void sign_picture(double x, double y, double z, int align, int kind)
 /* scenery_draw_banner: two posts, the cross bar, then a text shape or a picture */
 static void banner(const ObjRow *o, u16 flags, u16 C)
 {
-    double z = o->r.z, t = 1.0 + 48.0 / z;
+    double z = size_depth(&o->r), t = 1.0 + 48.0 / z;
     double ytop = o->y - 4.0 * (o->y - o->ye);
     enh_fill_rect(o->xl - t, ytop, o->xl, o->y, COL_BANNER);
     enh_fill_rect(o->xr + 1, ytop, o->xr + 1 + t, o->y, COL_BANNER);
@@ -305,7 +330,8 @@ static void row_objects(const ObjRow *o)
     int n = o->n;
     u16 c = trk(TRK_C, n), L = trk(TRK_L, n), R = trk(TRK_R, n);
     bool cross = c & 1;
-    double z = o->r.z, y = o->y;
+    double z = size_depth(&o->r), y = o->y;
+    bool mirror = o->r.mirror;                               /* the mirror has no sign pictures, no banners */
     if (L & 0x20) shape(cross ? o->xl : o->xol, y, z, -1, 0);
     if (L & 0x100) {
         if (cross)          shape(o->xl, y, z, -1, 4);
@@ -315,7 +341,7 @@ static void row_objects(const ObjRow *o)
     if (L & 0x800)  shape(o->xl, y, z, 1, 3);
     if (L & 0x1000) shape(o->xl, y, z, 1, 6);
     if (L & 1) {
-        if (cross) sign_picture(o->xl, (o->ye + y) / 2, z, 1, 1);
+        if (cross) { if (!mirror) sign_picture(o->xl, (o->ye + y) / 2, z, 1, 1); }
         else       shape(o->xl, y, z, 1, 1);
     }
     if (cross) {
@@ -343,10 +369,10 @@ static void row_objects(const ObjRow *o)
     if (R & 0x800)  shape(o->xr, y, z, 1, 3);
     if (R & 0x1000) shape(o->xr, y, z, -1, 6);
     if (R & 1) {
-        if (cross) sign_picture(o->xr, (o->ye + y) / 2, z, -1, 1);
+        if (cross) { if (!mirror) sign_picture(o->xr, (o->ye + y) / 2, z, -1, 1); }
         else       shape(o->xr, y, z, 1, 1);
     }
-    if (c & 0xF000) banner(o, c & 0xF000, c);
+    if ((c & 0xF000) && !mirror) banner(o, c & 0xF000, c);
     if (c & 0x100) shape(o->xr, y, z, 1, 5);
     if (c & 0x800) shape(o->xr, y, z, 1, 0x0F);
     if (c & 0x200) shape(o->xr, y, z, 1, 0x10);
@@ -358,7 +384,7 @@ static void row_objects(const ObjRow *o)
 static void town_block_ends(const Cam *c, int n)
 {
     if (trk(TRK_C, n) & 4) return;
-    ObjRow a = obj_row(c, n - 1), b = obj_row(c, n);
+    ObjRow a = obj_row(c, n - 1, false), b = obj_row(c, n, false);
     if (a.r.z <= 0.5) return;
     bool street = trk(TRK_C, n - 1) & 4;
     for (int side = 0; side < 2; side++) {
@@ -437,7 +463,7 @@ static int event_cmp(const void *a, const void *b)
 static void draw_event(const Cam *c, const EnhView *v, const Event *e)
 {
     if (e->kind == EV_OBJECTS) {
-        ObjRow o = obj_row(c, e->n);
+        ObjRow o = obj_row(c, e->n, false);
         row_objects(&o);
     } else if (e->kind == EV_BLOCK_END) {
         town_block_ends(c, e->n);
@@ -446,9 +472,157 @@ static void draw_event(const Cam *c, const EnhView *v, const Event *e)
     }
 }
 
+/* ---------------------------------------------------------------- the rear-view mirror (road_draw_mirror) */
+
+#define MIR_X0 0xF2            /* clip_set_mirror: (F2h, 16h) .. (13Dh, 2Ah) */
+#define MIR_Y0 0x16
+#define MIR_X1 0x13E
+#define MIR_Y1 0x2B
+#define MIR_ROWS 7             /* the original's rows 7..1 behind the car */
+
+/* road_draw_band_mirror + town_walls_mirror: the slice between sa (farther back) and sb */
+static void mirror_slice(const Cam *c, double sa, double sb, bool town)
+{
+    Row ra = row_at_mirror(c, sa), rb = row_at_mirror(c, sb);
+    if (ra.z <= 0.5 || rb.z <= 0.5) return;
+    double ya = py(&ra, Y_ROAD), yb = py(&rb, Y_ROAD);
+    if (ya >= yb) return;                                   /* back-facing */
+    int n = segc((int)ceil(sb - 1e-9));
+    u16 C = trk(TRK_C, n), L = trk(TRK_L, n), R = trk(TRK_R, n);
+    bool cross = C & 1;
+    if (town && cross && !(C & 4)) {                        /* façades; upper storeys: left half, right double */
+        double yea = py(&ra, Y_EYE), yeb = py(&rb, Y_EYE);
+        for (int side = 0; side < 2; side++) {
+            u16 F = side ? R : L;
+            double X = side ? 0xE74 : 0x44C, xa = px(c, &ra, X), xb = px(c, &rb, X);
+            double xs[4] = { xa, xb, xb, xa }, ys[4] = { ya, yb, yeb, yea };
+            enh_fill_poly(xs, ys, 4, (F & 0x10) ? COL_WALL_A : COL_WALL_B);
+            if (F & 4) {
+                double Yt = side ? 2 * Y_EYE - Y_ROAD : Y_EYE - (Y_ROAD - Y_EYE) / 2;
+                double ts[4] = { yea, yeb, py(&rb, Yt), py(&ra, Yt) };
+                enh_fill_poly(xs, ts, 4, COL_STOREY);
+            }
+        }
+    }
+    double la, ra_, lb, rb_;
+    edges_at(sa, &la, &ra_);
+    edges_at(sb, &lb, &rb_);
+    double xla = px(c, &ra, la), xra = px(c, &ra, ra_), xlb = px(c, &rb, lb), xrb = px(c, &rb, rb_);
+    if (!cross) {
+        enh_fill_rows(ya, yb, COL_GRASS);                   /* grass drawn explicitly */
+        quad(xlb, xrb, yb, xla, xra, ya, COL_ROAD);
+    } else {
+        if (C & 4) return;
+        double xola = px(c, &ra, 0x44C), xolb = px(c, &rb, 0x44C);
+        double xora = px(c, &ra, 0xE74), xorb = px(c, &rb, 0xE74);
+        if (L & 0x80) {
+            double ma = (xola + xla) / 2, mb = (xolb + xlb) / 2;
+            quad(xolb, mb, yb, xola, ma, ya, COL_KERB);
+            quad(mb, xlb, yb, ma, xla, ya, COL_GRASS);
+        } else
+            quad(xolb, xlb, yb, xola, xla, ya, COL_KERB);
+        if (R & 0x80) {
+            double ma = (xora + xra) / 2, mb = (xorb + xrb) / 2;
+            quad(xrb, mb, yb, xra, ma, ya, COL_GRASS);
+            quad(mb, xorb, yb, ma, xora, ya, COL_KERB);
+        } else
+            quad(xrb, xorb, yb, xra, xora, ya, COL_KERB);
+    }
+    if (C & 8) {
+        double ma = (la + ra_) / 2, mb = (lb + rb_) / 2;
+        quad(px(c, &rb, mb - DASH_HALF), px(c, &rb, mb + DASH_HALF), yb,
+             px(c, &ra, ma - DASH_HALF), px(c, &ra, ma + DASH_HALF), ya, COL_KERB);
+    }
+}
+
+/* The front views 10..12 are the native front view (9) shrunk for the depths below. */
+static double front_scale_k(void)
+{
+    static const double zc[13] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 40, 56 };
+    FarPtr n = ds_far(DS_opp_sprites + 4 * 9);
+    if (far_is_null(n) || desc_w(n) == 0) return 12;
+    double sum = 0;
+    int cnt = 0;
+    for (int s = 10; s <= 12; s++) {
+        FarPtr p = ds_far((u16)(DS_opp_sprites + 4 * s));
+        if (far_is_null(p)) continue;
+        sum += (double)desc_w(p) / desc_w(n) * zc[s];
+        cnt++;
+    }
+    return cnt ? sum / cnt : 12;
+}
+
+static void mirror_opponent(const Cam *c, const EnhView *v)
+{
+    if (v->opp_sprite < 9 || v->opp_sprite > 12) return;
+    Row r = row_at_mirror(c, v->opp_pos);
+    if (r.z < 1) return;
+    FarPtr p = ds_far(DS_opp_sprites + 4 * 9);
+    const EnhImage *img = enh_image_bitmap(p.seg, p.off);
+    if (!img) return;
+    double f = front_scale_k() / r.z;
+    if (f > 1.3) f = 1.3;
+    double sx = px(c, &r, v->opp_lat), sy = py(&r, Y_ROAD), w = img->w * f, h = img->h * f;
+    enh_draw_image(img, sx - w / 2, sy - h, sx + w / 2, sy);
+}
+
+static void draw_mirror(const Cam *c, const EnhView *v)
+{
+    FarPtr p = ds_far(DS_pic_mirror);                        /* mirror_draw_background */
+    const EnhImage *bg = enh_image_bitmap(p.seg, p.off);
+    if (bg) enh_draw_image(bg, 0xF0, 0x12, 0xF0 + bg->w, 0x12 + bg->h);
+    double s_far = v->pos - MIR_ROWS, s_near = v->pos - 1;
+    Row rf = row_at_mirror(c, s_far);
+    double y7 = py(&rf, Y_ROAD);
+    p = ds_far(DS_pic_mirror_sky);
+    const EnhImage *sky = enh_image_bitmap(p.seg, p.off);
+    if (sky && sky->h >= 2) {
+        EnhImage strip = { sky->w, 2, sky->px };              /* its first 2 rows over the horizon */
+        enh_draw_image(&strip, 0xF0, y7 - 2, 0xF0 + sky->w, y7);
+    }
+    enh_clip(MIR_X0, MIR_Y0, MIR_X1, MIR_Y1);
+
+    /* far to near (the mirror's far rows are the ones further behind); a row's objects and the opponent
+     * after the band in front of them */
+    Event ev[32];
+    int nev = 0;
+    for (int n = (int)ceil(s_far); n < s_near && nev < 30; n++) {
+        if (v->pos - n >= 1 && v->pos - n < 6 && !(trk(TRK_C, n) & 4))
+            ev[nev++] = (Event){ n + 1.0, EV_OBJECTS, n };
+    }
+    if (!v->town) ev[nev++] = (Event){ v->opp_pos + 1.0, EV_OPPONENT, 0 };
+    int e = 0;
+    for (int i = 1; i < nev; i++)                            /* ascending keys */
+        for (int k = i; k > 0 && ev[k].key < ev[k - 1].key; k--) { Event t_ = ev[k]; ev[k] = ev[k - 1]; ev[k - 1] = t_; }
+    double sa = s_far;
+    double s = ceil(s_far * SLICES) / SLICES;
+    if (s <= sa) s += 1.0 / SLICES;
+    while (sa < s_near) {
+        while (e < nev && ev[e].key <= sa) {
+            if (ev[e].kind == EV_OBJECTS) { ObjRow o = obj_row(c, ev[e].n, true); row_objects(&o); }
+            else mirror_opponent(c, v);
+            e++;
+        }
+        double sb = s < s_near ? s : s_near;
+        mirror_slice(c, sa, sb, v->town);
+        sa = sb;
+        s += 1.0 / SLICES;
+    }
+    for (; e < nev; e++) {
+        if (ev[e].kind == EV_OBJECTS) { ObjRow o = obj_row(c, ev[e].n, true); row_objects(&o); }
+        else mirror_opponent(c, v);
+    }
+    enh_clip_view();
+    enh_fill_rect(0xF0, 0x17, 0xF1, 0x2B, 2);                /* the frame */
+    enh_fill_rect(0xF1, 0x17, 0xF2, 0x2B, 4);
+    enh_fill_rect(0x13E, 0x17, 0x13F, 0x2B, 4);
+    enh_fill_rect(0x13F, 0x17, 0x140, 0x2B, 2);
+}
+
 void enh_draw_road(const EnhView *v)
 {
     enh_buf_setup();
+    enh_clip_view();
     Cam c;
     c.base = segc((int)floor(v->pos));
     c.pos = v->pos;
@@ -488,4 +662,5 @@ void enh_draw_road(const EnhView *v)
         s -= 1.0 / SLICES;
     }
     while (e < nev) draw_event(&c, v, &ev[e++]);
+    draw_mirror(&c, v);
 }

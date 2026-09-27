@@ -21,15 +21,32 @@ void enh_buf_setup(void)
     enh_buf.w = w;
     enh_buf.h = h;
     enh_buf.sa = sa;
+    enh_clip_view();
+}
+
+void enh_clip(double x0, double y0, double x1, double y1)
+{
+    EnhBuf *b = &enh_buf;
+    b->cx0 = SDL_clamp((int)ceil(x0 * b->sa - 0.5), 0, b->w);
+    b->cx1 = SDL_clamp((int)ceil(x1 * b->sa - 0.5), 0, b->w);
+    b->cy0 = SDL_clamp((int)ceil((y0 - ENH_VIEW_Y0) * b->sa - 0.5), 0, b->h);
+    b->cy1 = SDL_clamp((int)ceil((y1 - ENH_VIEW_Y0) * b->sa - 0.5), 0, b->h);
+}
+
+void enh_clip_view(void)
+{
+    EnhBuf *b = &enh_buf;
+    b->cx0 = 0; b->cy0 = 0; b->cx1 = b->w; b->cy1 = b->h;
 }
 
 void enh_fill_rows(double y0, double y1, u8 c)
 {
     EnhBuf *b = &enh_buf;
     int j0 = (int)ceil((y0 - ENH_VIEW_Y0) * b->sa - 0.5), j1 = (int)ceil((y1 - ENH_VIEW_Y0) * b->sa - 0.5);
-    if (j0 < 0) j0 = 0;
-    if (j1 > b->h) j1 = b->h;
-    for (int j = j0; j < j1; j++) memset(b->px + (size_t)j * b->w, c, (size_t)b->w);
+    if (j0 < b->cy0) j0 = b->cy0;
+    if (j1 > b->cy1) j1 = b->cy1;
+    if (b->cx1 <= b->cx0) return;
+    for (int j = j0; j < j1; j++) memset(b->px + (size_t)j * b->w + b->cx0, c, (size_t)(b->cx1 - b->cx0));
 }
 
 /* Convex polygon, vertices in original screen coordinates (any winding). A sample is covered when its
@@ -46,8 +63,8 @@ void enh_fill_poly(const double *xs, const double *ys, int n, u8 c)
         if (sy[i] > ymax) ymax = sy[i];
     }
     int j0 = (int)ceil(ymin - 0.5), j1 = (int)ceil(ymax - 0.5);
-    if (j0 < 0) j0 = 0;
-    if (j1 > b->h) j1 = b->h;
+    if (j0 < b->cy0) j0 = b->cy0;
+    if (j1 > b->cy1) j1 = b->cy1;
     for (int j = j0; j < j1; j++) {
         double yc = j + 0.5, xl = 1e30, xr = -1e30;
         for (int i = 0; i < n; i++) {
@@ -60,8 +77,8 @@ void enh_fill_poly(const double *xs, const double *ys, int n, u8 c)
         }
         if (xl > xr) continue;
         int i0 = (int)ceil(xl - 0.5), i1 = (int)ceil(xr - 0.5);
-        if (i0 < 0) i0 = 0;
-        if (i1 > b->w) i1 = b->w;
+        if (i0 < b->cx0) i0 = b->cx0;
+        if (i1 > b->cx1) i1 = b->cx1;
         if (i1 > i0) memset(b->px + (size_t)j * b->w + i0, c, (size_t)(i1 - i0));
     }
 }

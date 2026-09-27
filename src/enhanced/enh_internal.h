@@ -35,9 +35,13 @@ bool enh_view_at(Uint64 now_ns, EnhView *v);
 typedef struct {
     int w, h, sa;
     u8 *px;                    /* palette indices */
+    int cx0, cy0, cx1, cy1;    /* clip rectangle, samples */
 } EnhBuf;
 extern EnhBuf enh_buf;
 void enh_buf_setup(void);
+/* Drawing is clipped to [x0, x1) x [y0, y1) of the original screen; enh_clip_view() = the whole view. */
+void enh_clip(double x0, double y0, double x1, double y1);
+void enh_clip_view(void);
 void enh_fill_rows(double y0, double y1, u8 c);                  /* original screen rows [y0, y1) */
 void enh_fill_poly(const double *xs, const double *ys, int n, u8 c);
 /* Output rows ENH_VIEW_Y0..y_end of xrgb (320*S wide): the samples resolved through pal, except where the
