@@ -41,6 +41,10 @@ private:
     wxCheckBox* noMouse_ = nullptr;
     wxChoice* scale_ = nullptr;
     wxCheckBox* fullscreen_ = nullptr;
+    wxChoice* graphics_ = nullptr;   // enhanced / original
+    wxChoice* resolution_ = nullptr;
+    wxChoice* aa_ = nullptr;
+    wxCheckBox* town_ = nullptr;
     wxButton* play_ = nullptr;
 
     GameFolder game_;

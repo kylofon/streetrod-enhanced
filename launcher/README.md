@@ -11,7 +11,8 @@ like the Street Rod and Test Drive III launchers it is modelled on.
   * **Program**: `streetrod-enhanced.exe` (default: beside the launcher).
   * The line below says whether the folder holds Street Rod or Street Rod SE and how many saved games it has,
     or which file is missing (`SR.EXE` or `SRSE.EXE`, `LIB1`, `LIB2`, `HOT_DATA`). **Play** stays greyed out
-    until the folder and the program are there.
+    until the folder and the program are there. A DOS program (the original `SR.EXE`) is refused as the
+    program: Windows can't run it.
 * **Start**
   * **Cars**: the original cars, or the 25 cars of the Street Rod car data disks. The second needs a
     `datadisk` folder with Street Rod SE (`SRSE.EXE` and its `LIB1`, `LIB2`, `HOT_DATA`) inside the game folder,
@@ -20,6 +21,10 @@ like the Street Rod and Test Drive III launchers it is modelled on.
     drive themselves** (`auto`) and **No mouse** (`nomouse`).
 * **Options**: **Window size** (`--scale`) and **Start in full screen** (`--fullscreen`; Alt+Enter switches).
 * **Keys in the game**: a reminder of the game's keys, including the port's A / Z gear keys.
+* **Picture**: **Graphics** enhanced (the smooth, high-resolution road view, the default) or original
+  (`--classic`); **Resolution** of the picture, 640 × 400 to 2560 × 1600 (`--res-scale`, default 1280 × 800);
+  **Anti-aliasing** off, 2 × 2 (default), 3 × 3 or 4 × 4 (`--aa`); **Drives through town enhanced too**
+  (`--town`). The last three are greyed out with the original graphics.
 * **Play** starts the game; the launcher stays open. **About**: version, author and links.
 
 Everything is remembered in `%APPDATA%\Street Rod Enhanced\settings.ini` (`~/.config/street-rod-enhanced` on Linux). A folder or

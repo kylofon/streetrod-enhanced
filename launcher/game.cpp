@@ -85,6 +85,12 @@ bool LaunchGame(const GameOptions& o, wxString& error) {
                                "--game-dir", o.gameDir,
                                "--scale", wxString::Format("%d", o.scale)};
     if (o.fullscreen) args.push_back("--fullscreen");
+    if (o.classic) {
+        args.push_back("--classic");
+    } else {
+        args.insert(args.end(), {"--res-scale", wxString::Format("%d", o.resScale),
+                                 "--aa", wxString::Format("%d", o.aa), "--town", o.town ? "on" : "off"});
+    }
     // The original's own command-line switches, passed on as the port receives them.
     if (o.noMouse) args.push_back("nomouse");
     if (o.demo) args.push_back("demo");

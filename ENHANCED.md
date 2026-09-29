@@ -1,4 +1,4 @@
-﻿# Enhanced version â€” plan (nothing implemented yet)
+# Enhanced version — design and status
 
 The faithful engine (see `ENGINE.md`) keeps running unchanged: game flow, garage, the race logic and physics,
 the original road renderer, the dashboard and all the other screens, at the game's own pace. `src/enhanced/`
@@ -9,6 +9,32 @@ III Enhanced (TD2E, TD3E).
 The goal of this version is **higher resolution and a longer draw distance** for the racing view. Smooth motion
 comes along with it: at 8 frames a second, a high-resolution picture only makes the stepping more visible.
 
+## Status (0.1.0)
+
+Stage 1 is done; stage 2 (the longer draw distance) is not started.
+
+* Done: the scaled output frame and the coverage (§2), smooth motion, the road, sky and horizon, the road-side
+  objects, signs, banners, town walls, the opponent and the police car, the rear-view mirror, the town cruise,
+  the options and the launcher's Picture box.
+* Still the original's picture, laid over the enhanced view: the cockpit (A-pillar, hood), the drag race's start
+  light, the messages, and the dashboard below the split with its side mirror.
+* Changes from the plan below, made while testing:
+  * **Coverage by layer.** `road_draw_frame` marks what it draws: `enh_draw_begin` / `enh_draw_fg` switch the EGA
+    model between a background layer (replaced by the enhanced view) and a foreground layer (kept). The
+    foreground takes only the pixels a write changed, because masked blits rewrite whole bytes. The frame is
+    marked presented *before* `ega_show_page`, since the host presents during its retrace wait.
+  * **Motion from the physics.** In a race the cars move in `race_phys_step`, every 12th tick, not once per
+    frame (9 ticks). Their road positions are interpolated between physics steps (`enh_phys_step`); the
+    camera's lateral position and heading between frames.
+  * **Sky scroll.** The sky and the horizon panorama scroll an eighth of the original's rate (`SKY_SCROLL`):
+    tied to the heading as in the original, they raced across the screen when steering.
+  * **Largest sizes only.** Road-side shapes always use the most detailed of the original's sizes, scaled by
+    depth; signs use the largest pre-scaled picture; the cars their native pictures, scaled to fit the
+    original's shrunk views (at most 1.3 times the native size).
+  * **Mirror objects** stand at their true segment (the original draws them one segment off).
+* Not done yet: rendering on worker threads (about 8.5 ms a frame at 1280 × 800, 2 × 2, on one core), mip
+  levels for far sprites, the developer aids of §5 beyond `SR_ENH_TRACE`.
+
 References:
 
 * RR is `../StreetRod/port/spec/race_render.md`.
@@ -17,8 +43,8 @@ References:
 ## 1. What the original gives us
 
 * **The whole road is in memory.** Segment 389b holds five u16 arrays of 1120 entries each: L, R, YAW, C and
-  HGT (RR Â§3.1, flag bits in Â§5.2).
-  * Segments 0â€“179 are the town and 180â€“1119 the race road. A race starts at 200.
+  HGT (RR §3.1, flag bits in §5.2).
+  * Segments 0–179 are the town and 180–1119 the race road. A race starts at 200.
   * The finish is at 0x17C for the drag race and 0x3FC for the road race.
   * After the last course feature, the road runs flat with its final heading up to 0x45F
     (`race_track.c:285-293`).
@@ -35,8 +61,8 @@ References:
 * **Pacing:** a frame every 9 ticks (about 8.1 fps). The track advance happens once per frame, so the game rate
   stays as it is (`ENGINE.md` timing rule). Smoothness must come from interpolation.
 * **Layout:**
-  * The view occupies x 0â€“319, rows 0x12â€“0x65. The dashboard sits below the split at 0x63.
-  * The mirror clip is (0xF2,0x16)â€“(0x13D,0x2A).
+  * The view occupies x 0–319, rows 0x12–0x65. The dashboard sits below the split at 0x63.
+  * The mirror clip is (0xF2,0x16)–(0x13D,0x2A).
   * The pages are at A200 and A400, flipped in `road_page_flip`.
 
 ## 2. Architecture (as in TD3E)
@@ -63,7 +89,7 @@ References:
 
 **Host changes**
 
-* Raise `HOST_FRAME_MAX_W/H` (`host.h:24-25`) to 320Ã—8 by 200Ã—8. Let `ega.c` register the frame at 320Ã—200 Ã— scale.
+* Raise `HOST_FRAME_MAX_W/H` (`host.h:24-25`) to 320×8 by 200×8. Let `ega.c` register the frame at 320×200 × scale.
 * The EGA image is scaled up nearest-neighbour. The enhanced view replaces the pixels in the view window that
   coverage allows.
 * While racing, the frame source reports a change on every present, so the host draws at the display rate
@@ -80,7 +106,7 @@ The start light, the "pulled over" and finish messages, and the results screens 
 special cases. The A-pillar (LIB2 #6) and the hood (#7) are redrawn by the enhanced code over its own view, at
 their scaled positions, so they don't punch holes in the view.
 
-## 3. Stage 1 â€” high resolution, smooth motion, original draw distance
+## 3. Stage 1 — high resolution, smooth motion, original draw distance
 
 1. **Snapshots and interpolation.**
    * Record the continuous position `seg + substep/8`, the lateral position, the heading, the height and the
@@ -93,26 +119,26 @@ their scaled positions, so they don't punch holes in the view.
 2. **Road geometry.**
    * For each segment from the car forward, compute the edges in world space: L and R, the outer edges, the
      centre and the dash flags.
-   * Subdivide each segment into 4â€“8 slices with interpolated heading and height.
+   * Subdivide each segment into 4–8 slices with interpolated heading and height.
    * Project in float with the original formula at the output scale (factor `res_scale`). Emit trapezoids far
      to near, in the original's painter's order.
    * Road elements, all from the same flags: asphalt, grass and outer bands; centre dashes (every 4th segment);
      kerbs and sidewalks; the white finish band (`C&0x10`); crossings; town walls (`quad_fill` equivalents).
 3. **Raster and anti-aliasing.**
-   * Samples are palette indices at `res_scale Ã— aa`; defaults are 1280Ã—800 and 2Ã—2.
+   * Samples are palette indices at `res_scale × aa`; defaults are 1280×800 and 2×2.
    * Resolve in linear light through the current EGA palette.
    * Bands of rows run on a worker pool, as TD3E does.
 4. **Sky and horizon.**
    * The sky (LIB2 #5) and the mountains (#267, town #1008) are decoded at native size and scaled.
    * They scroll continuously with the interpolated heading (`heading*2` and `heading*4`, without the
      original's rounding to 8).
-   * The horizon y comes from `road_proj_y(0xF0, â€¦)` in float.
+   * The horizon y comes from `road_proj_y(0xF0, …)` in float.
 5. **Sprites.**
-   * Road-side objects (RR Â§4.11): the originals are hline shapes in 7 fixed sizes. Draw the largest size scaled
+   * Road-side objects (RR §4.11): the originals are hline shapes in 7 fixed sizes. Draw the largest size scaled
      continuously by `1/z`, matched so that the result equals the original size at the original's row depths.
    * Billboards and signs from their largest pre-scaled page image.
    * The opponent and the police from the native LIB2 pictures, not the `pic_shrink_planar` versions. Use the
-     same view choice (rear 2â€“8, alongside 0/1/3) with the same hysteresis, and one world size.
+     same view choice (rear 2–8, alongside 0/1/3) with the same hysteresis, and one world size.
    * Banner posts and the top bar as polygons.
    * Mip levels for downscaling, built from the most frequent pattern and not by averaging indices (TD2E
      `build_mips`).
@@ -124,21 +150,21 @@ their scaled positions, so they don't punch holes in the view.
 7. **Town cruise.** It uses the same renderer and data, so it is enhanced in stage 1. It can be switched off
    separately if it causes trouble.
 8. **Options:** `--classic`, `--res-scale 1..8` (default 4) and `--aa 1..4` (default 2), with
-   `res_scale Ã— aa â‰¤ 16`. Also `--motion-delay` (default 100) and `--town-enhanced on|off`.
+   `res_scale × aa ≤ 16`. Also `--motion-delay` (default 100) and `--town-enhanced on|off`.
 
    Launcher: a "Picture" group with Graphics (enhanced / original), Resolution, Anti-aliasing and Motion.
 
 **Stage 1 acceptance:**
 
-* At draw distance 15, with the time stopped (`TD_ENH_COMPARE`), the enhanced view scaled down to 320Ã—200
-  matches the original frame. Road edge rows should be within Â±1 px, and objects at the same row and size.
+* At draw distance 15, with the time stopped (`TD_ENH_COMPARE`), the enhanced view scaled down to 320×200
+  matches the original frame. Road edge rows should be within ±1 px, and objects at the same row and size.
 * No regressions in the faithful `--check`.
 
-## 4. Stage 2 â€” longer draw distance
+## 4. Stage 2 — longer draw distance
 
 The road ahead exists in the table, so the geometry comes almost for free. The work is in making it look right.
 
-1. **`--draw-distance N` segments**: default 60, range 15â€“120.
+1. **`--draw-distance N` segments**: default 60, range 15–120.
    * Roads: every segment up to `seg + N`, with fewer slices per segment further away. Far segments whose
      projected width is below a sample get a single slice.
    * `top_band_row` culling is replaced by a horizon clip. Hills that hide the road behind them occlude it
@@ -147,10 +173,10 @@ The road ahead exists in the table, so the geometry comes almost for free. The w
    * Beyond the table, synthesise flat straight road with the final YAW and HGT and no objects.
    * In a drag race, the table past 0x17C holds the rest of the road-race course. Beyond the finish, show plain
      flat road with no objects, so the drag strip doesn't show buildings of a race that isn't being run.
-   * The town (0â€“179) must not show race-road segments: clamp the town view to segment 179, or to the
+   * The town (0–179) must not show race-road segments: clamp the town view to segment 179, or to the
      destination.
 3. **Scenery at distance.**
-   * The original draws objects only in rows 1â€“10 and sizes them for that range. Extend them up to N with the
+   * The original draws objects only in rows 1–10 and sizes them for that range. Extend them up to N with the
      same continuous scaling.
    * Fade them in over the last 10% of the distance with a dithered alpha (TD2E).
    * Tiny sprites below 1 sample are dropped.
@@ -168,7 +194,7 @@ The road ahead exists in the table, so the geometry comes almost for free. The w
    follow palette changes (TD2E `enh_colours_setup`). Stage 2 uses them for haze.
 8. **Mirror distance:** 8 segments in the original, raised to `min(N/2, 30)`. Objects behind the car come from
    the table, which is read-only history, so no ring buffer is needed (unlike TD2E).
-9. **Cost.** Measure the render time at 1280Ã—800 2Ã—2 with N = 60 and 120. The target is under 4 ms a frame on
+9. **Cost.** Measure the render time at 1280×800 2×2 with N = 60 and 120. The target is under 4 ms a frame on
    the worker pool (TD3E: 4.2 ms with its far ring).
 
 **Stage 2 acceptance:**

@@ -3,15 +3,26 @@
 An enhanced version of *Street Rod* (1989, California Dreams / Logical Design Works), running natively on SDL3.
 The game itself is the faithful C reimplementation of `SR.EXE` from the Street Rod port
 ([street-rod-sdl3](https://github.com/kylofon/street-rod-sdl3); VGA 16 colours, PC speaker). On top of it, the
-road view of the races and the drives through town is to be drawn again at a high resolution and move smoothly
-at your screen's refresh rate, from the original data only (see `ENHANCED.md`). It is not an emulator. The
+road view of the races and the drives through town is drawn again at a high resolution and moves smoothly at
+your screen's refresh rate, from the original data only (see `ENHANCED.md`). It is not an emulator. The
 original data is not redistributed; you can get the game for free from the copyright owner:
 https://www.streetrodonline.com/downloads/.
 
 ## Status
 
-Project set-up: the program is still the faithful port (renamed), with its launcher. The enhancements are
-planned in `ENHANCED.md`; nothing is enhanced yet.
+0.1.0: the enhanced road view (stage 1 of `ENHANCED.md`).
+
+* The road view of races and town drives at 1280 × 800 by default (up to 2560 × 1600) with anti-aliased edges,
+  moving smoothly between the game's frames (about 8 a second): the road, the sky and the horizon, the
+  road-side objects, signs and banners, the town's buildings, the opponent and the police car, and the rear-view
+  mirror.
+* The game itself is unchanged: the same physics, opponents, timing and screens. The cockpit, the start light,
+  the dashboard and all other screens are the original's pictures, scaled.
+* Planned (stage 2): a longer draw distance.
+
+Options (the launcher's Picture box sets them): `--classic` shows the original picture; `--res-scale N` (2..8,
+default 4) the picture size, 320 × 200 times N; `--aa N` (1..4, default 2) anti-aliasing; `--town off` leaves
+the drives through town original.
 
 ## How to play (Windows)
 
@@ -51,7 +62,8 @@ This builds `streetrod-enhanced.exe` and the launcher `Street Rod Enhanced.exe` 
 
 ## Files
 
-* `src/` — the engine (`ENGINE.md`: where it comes from and its rules) and, later, `src/enhanced/`.
+* `src/` — the engine (`ENGINE.md`: where it comes from and its rules) and `src/enhanced/`, the enhanced road
+  view.
 * `launcher/` — the launcher (`launcher/README.md`).
 * `ENHANCED.md` — the design of the enhancements. `CHANGELOG.md` — the changes.
 

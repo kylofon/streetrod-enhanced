@@ -35,6 +35,8 @@ const char* const SUPPORT = "https://buymeacoffee.com/krzysztofkania";
 const char* const SECTION = "Game";
 
 const int MIN_SCALE = 1, MAX_SCALE = 6, DEFAULT_SCALE = 3;
+const int MIN_RES = 2, MAX_RES = 8, DEFAULT_RES = 4;     // --res-scale
+const int MAX_AA = 4, DEFAULT_AA = 2;                    // --aa (1 = off)
 
 #ifdef __WXMSW__
 HRESULT CALLBACK AboutCallback(HWND hwnd, UINT msg, WPARAM, LPARAM lp, LONG_PTR) {
@@ -181,6 +183,33 @@ LauncherDialog::LauncherDialog()
     }
     keysBox->Add(keys, 0, wxALL, gap);
 
+    // Picture: the enhanced road view
+    auto* pictureBox = new wxStaticBoxSizer(wxVERTICAL, this, "Picture");
+    wxWindow* pb = pictureBox->GetStaticBox();
+    auto* pgrid = new wxFlexGridSizer(2, gap, gap);
+    pgrid->Add(new wxStaticText(pb, wxID_ANY, "&Graphics:"), 0, wxALIGN_CENTER_VERTICAL);
+    graphics_ = new wxChoice(pb, wxID_ANY);
+    graphics_->Append("Enhanced: smooth, high-resolution road (default)");
+    graphics_->Append("Original: the game's own picture");
+    graphics_->SetToolTip("Enhanced draws the road view of races and town drives again at a high resolution, "
+                          "moving smoothly at your screen's refresh rate. Original shows the game as it was.");
+    pgrid->Add(graphics_, 0, wxALIGN_CENTER_VERTICAL);
+    pgrid->Add(new wxStaticText(pb, wxID_ANY, "&Resolution:"), 0, wxALIGN_CENTER_VERTICAL);
+    resolution_ = new wxChoice(pb, wxID_ANY);
+    for (int s = MIN_RES; s <= MAX_RES; ++s) resolution_->Append(wxString::Format(L"%d × %d", 320 * s, 200 * s));
+    resolution_->SetToolTip("The size of the picture the game draws; the window scales it.");
+    pgrid->Add(resolution_, 0, wxALIGN_CENTER_VERTICAL);
+    pgrid->Add(new wxStaticText(pb, wxID_ANY, "&Anti-aliasing:"), 0, wxALIGN_CENTER_VERTICAL);
+    aa_ = new wxChoice(pb, wxID_ANY);
+    aa_->Append("Off");
+    for (int a = 2; a <= MAX_AA; ++a) aa_->Append(wxString::Format(L"%d × %d", a, a));
+    aa_->SetToolTip("Smooth edges: samples per pixel. Higher costs more time per frame.");
+    pgrid->Add(aa_, 0, wxALIGN_CENTER_VERTICAL);
+    pictureBox->Add(pgrid, 0, wxLEFT | wxRIGHT | wxTOP, gap);
+    town_ = new wxCheckBox(pb, wxID_ANY, "Drives through &town enhanced too");
+    pictureBox->Add(town_, 0, wxALL, gap);
+    graphics_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { UpdateState(); });
+
     // Buttons
     auto* buttons = new wxBoxSizer(wxHORIZONTAL);
     auto* about = new wxButton(this, wxID_ABOUT, "&About");
@@ -201,9 +230,12 @@ LauncherDialog::LauncherDialog()
     left->Add(filesBox, 0, wxEXPAND);
     left->Add(startBox, 0, wxEXPAND | wxTOP, margin);
     left->Add(optionsBox, 1, wxEXPAND | wxTOP, margin);
+    auto* right = new wxBoxSizer(wxVERTICAL);
+    right->Add(keysBox, 0, wxEXPAND);
+    right->Add(pictureBox, 1, wxEXPAND | wxTOP, margin);
     auto* columns = new wxBoxSizer(wxHORIZONTAL);
     columns->Add(left, 0, wxEXPAND);
-    columns->Add(keysBox, 0, wxEXPAND | wxLEFT, margin);
+    columns->Add(right, 0, wxEXPAND | wxLEFT, margin);
     auto* all = new wxBoxSizer(wxVERTICAL);
     all->Add(columns, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, margin);
     all->Add(buttons, 0, wxEXPAND | wxALL, margin);
@@ -223,6 +255,11 @@ LauncherDialog::LauncherDialog()
     scale_->SetSelection(
         wxMax(MIN_SCALE, wxMin(MAX_SCALE, settings::GetInt(SECTION, "Scale", DEFAULT_SCALE))) - MIN_SCALE);
     fullscreen_->SetValue(settings::GetInt(SECTION, "Fullscreen", 0) != 0);
+    graphics_->SetSelection(settings::GetInt(SECTION, "Classic", 0) != 0 ? 1 : 0);
+    resolution_->SetSelection(
+        wxMax(MIN_RES, wxMin(MAX_RES, settings::GetInt(SECTION, "ResScale", DEFAULT_RES))) - MIN_RES);
+    aa_->SetSelection(wxMax(1, wxMin(MAX_AA, settings::GetInt(SECTION, "AA", DEFAULT_AA))) - 1);
+    town_->SetValue(settings::GetInt(SECTION, "Town", 1) != 0);
     loading_ = false;
     UpdateState();
 
@@ -281,6 +318,10 @@ void LauncherDialog::UpdateState() {
     statusIcon_->Show(!ok);
     statusNote_->SetLabel(note);
     play_->Enable(ok);
+    const bool enhanced = graphics_->GetSelection() == 0;
+    resolution_->Enable(enhanced);
+    aa_->Enable(enhanced);
+    town_->Enable(enhanced);
     Layout();
     Fit();
 }
@@ -313,6 +354,10 @@ void LauncherDialog::Play() {
     options.noMouse = noMouse_->GetValue();
     options.scale = scale_->GetSelection() + MIN_SCALE;
     options.fullscreen = fullscreen_->GetValue();
+    options.classic = graphics_->GetSelection() == 1;
+    options.resScale = resolution_->GetSelection() + MIN_RES;
+    options.aa = aa_->GetSelection() + 1;
+    options.town = town_->GetValue();
     wxString error;
     if (!LaunchGame(options, error)) wxMessageBox(error, APP_TITLE, wxOK | wxICON_ERROR, this);
 }
@@ -330,6 +375,10 @@ void LauncherDialog::Save() {
     settings::SetInt(SECTION, "NoMouse", noMouse_->GetValue() ? 1 : 0);
     settings::SetInt(SECTION, "Scale", scale_->GetSelection() + MIN_SCALE);
     settings::SetInt(SECTION, "Fullscreen", fullscreen_->GetValue() ? 1 : 0);
+    settings::SetInt(SECTION, "Classic", graphics_->GetSelection() == 1 ? 1 : 0);
+    settings::SetInt(SECTION, "ResScale", resolution_->GetSelection() + MIN_RES);
+    settings::SetInt(SECTION, "AA", aa_->GetSelection() + 1);
+    settings::SetInt(SECTION, "Town", town_->GetValue() ? 1 : 0);
     settings::SaveWindowPosition(SECTION, this);
 }
 
