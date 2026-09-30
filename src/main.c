@@ -5,6 +5,8 @@
  *   --scale       initial window scale: 320x240 times N (default 3)
  *   --fullscreen  start in full screen (Alt+Enter switches)
  *   --check       load and verify the original executable, print a summary and exit (no window)
+ *   --music-volume N  volume of the music (the background tune), percent 0..100 (default 100)
+ *   --sfx-volume N    volume of the sound effects, the engine and the loop sounds, 0..100 (default 100)
  * enhanced view (ENHANCED.md):
  *   --classic         the original's picture only
  *   --res-scale N     output = 320x200 times N, 1..8 (default 4; 1 with --classic)
@@ -34,6 +36,7 @@
 static int usage(const char *prog)
 {
     fprintf(stderr, "usage: %s [--game-dir DIR] [--scale N] [--fullscreen] [--check] "
+                    "[--music-volume N] [--sfx-volume N] "
                     "[1] [nomouse] [demo] [auto] [nouemem]\n", prog);
     return 2;
 }
@@ -65,6 +68,7 @@ int main(int argc, char **argv)
     int scale = 3;
     bool check = false, fullscreen = false;
     bool classic = false, town = true;
+    int music_volume = 100, sfx_volume = 100;
     int res_scale = -1, aa = ENH_DEFAULT_AA, motion_delay = ENH_DEFAULT_MOTION_DELAY;
     char *game_argv[MAX_GAME_ARGS + 1] = { argv[0] };
     int game_argc = 1;
@@ -74,6 +78,8 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--scale") && v) { scale = atoi(v); i++; }
         else if (!strcmp(a, "--fullscreen")) fullscreen = true;
         else if (!strcmp(a, "--check")) check = true;
+        else if (!strcmp(a, "--music-volume") && v) { music_volume = atoi(v); i++; }
+        else if (!strcmp(a, "--sfx-volume") && v) { sfx_volume = atoi(v); i++; }
         else if (!strcmp(a, "--classic")) classic = true;
         else if (!strcmp(a, "--res-scale") && v) { res_scale = atoi(v); i++; }
         else if (!strcmp(a, "--aa") && v) { aa = atoi(v); i++; }
@@ -100,6 +106,7 @@ int main(int argc, char **argv)
     if (res_scale < 0) res_scale = classic ? 1 : ENH_DEFAULT_RES_SCALE;
     enh_init(!classic, res_scale, aa, motion_delay, town);
     if (!host_init(dir, scale, fullscreen)) return 1;
+    host_set_volumes(music_volume, sfx_volume);
     ega_init();                     /* 16-colour planar display: frame source, planes */
     modules_init();                 /* hooks into subsystems ported separately (modules.h) */
     platform_main_init(game_argc, game_argv);   /* main 0000:066f up to the game loop */

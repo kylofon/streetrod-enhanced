@@ -84,6 +84,11 @@ u8   host_port61_get(void);                 /* in 61h: the last value written */
  * timeline. Inside the tick handler it only advances the timeline. */
 void host_busy_wait_ns(uint64_t ns);
 void host_busy_wait_us(u32 us);
+/* Volumes in percent, 0..100 (default 100 each). The speaker is one channel: the sound module says
+ * before each write whether the music (the background tune) or an effect drives it, and the level
+ * from then on is scaled by that source's volume. */
+void host_set_volumes(int music, int effects);
+void host_speaker_source(bool music);
 /* Old interface: host_pit2_divisor(divisor); port 61h bits 0-1 = on ? 3 : 0. */
 void host_speaker(u16 divisor, bool on);
 

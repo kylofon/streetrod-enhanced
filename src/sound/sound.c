@@ -66,11 +66,11 @@ void snd_timer_gate_check(void)
     if (DSB(DS_sound_on) == 0 && DSB(DS_speaker_on) != DSB(DS_sound_on)) spk_gate_off();
 }
 
+bool snd_music_writing;
+
 /* 0000:1fe2 @20b8-2294: the music sequencer (sound.md 4.3). */
-void snd_music_tick(void)
+static void music_tick(u16 s)
 {
-    u16 s = DSW(DS_music_cur);
-    if (!DSB(s + SS_PLAYING)) return;
     if (--DSW(s + SS_DUR) != 0) {
         /* 20c7: vibrato step of the sounding note */
         if (DSW(DS_vib_enabled) == 0) return;
@@ -142,6 +142,15 @@ void snd_music_tick(void)
         spk_gate_on();
         DSB(s + SS_REGATE) = 0;
     }
+}
+
+void snd_music_tick(void)
+{
+    u16 s = DSW(DS_music_cur);
+    if (!DSB(s + SS_PLAYING)) return;
+    snd_music_writing = s == DS_bg_song;                      /* PORT: the music volume */
+    music_tick(s);
+    snd_music_writing = false;
 }
 
 void snd_timer_tick(void)

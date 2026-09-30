@@ -1,18 +1,17 @@
 # Changelog
 
-## 0.1.0 (2026-09-29)
+## 0.2.0
 
-- **Enhanced road view** (`src/enhanced/`, `ENHANCED.md`): the races and the drives through town drawn again at
-  1280 × 800 (320 × 200 up to 8 times) with 2 × 2 anti-aliasing, moving smoothly at the screen's refresh rate
-  while the game keeps its own pace: the road, kerbs, sidewalks, dashes and finish, the sky and the horizon, the
-  road-side objects, signs and banners (the largest sizes, scaled by depth), the town's walls, the opponent and
-  the police car, and the rear-view mirror.
-- Options `--classic` (the original picture), `--res-scale`, `--aa`, `--motion-delay`, `--town on|off`;
-  `SR_ENH_TRACE=file` for the smooth view's positions and render times.
-- Launcher: a Picture box (graphics enhanced / original, resolution, anti-aliasing, town drives); the Program
-  field refuses a DOS program such as `SR.EXE`.
+- Separate music and sound effects volumes (`--music-volume`, `--sfx-volume`).
+- Launcher: menus (File > Preferences with Always on top, Game settings > Sounds, About), as in Aces of the Pacific Enhanced.
+- Launcher: Game settings > Sounds, with sliders for the music and sound effects volumes.
 
-- Project from the faithful Street Rod port (`../StreetRod`, `srport/` at 0e5598e, release v0.1.0): the game, its
-  launcher (renamed "Street Rod Enhanced", settings in `%APPDATA%\Street Rod Enhanced`, built by default) and the
-  build. The sound check tool `srsnd-dump` stays in the faithful repository.
-- `ENHANCED.md`: the design of the enhanced road view (proposal).
+## 0.1.0
+
+- Project started from the faithful Street Rod port, with its launcher renamed "Street Rod Enhanced".
+- Enhanced road view in races and drives through town, redrawn smoothly at the display's rate (`--motion-delay`).
+- High resolution (`--res-scale`) with anti-aliasing (`--aa`).
+- Redrawn: the road, kerbs, sidewalks, sky, horizon, roadside objects, signs, banners, town walls, the opponent,
+  the police car and the rear-view mirror.
+- `--classic` shows the original picture only; `--town off` leaves the drives through town original.
+- Launcher: a Picture box; the Program field refuses a DOS program such as `SR.EXE`.

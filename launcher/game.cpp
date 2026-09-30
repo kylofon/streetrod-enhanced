@@ -91,6 +91,9 @@ bool LaunchGame(const GameOptions& o, wxString& error) {
         args.insert(args.end(), {"--res-scale", wxString::Format("%d", o.resScale),
                                  "--aa", wxString::Format("%d", o.aa), "--town", o.town ? "on" : "off"});
     }
+    // The volumes only when turned down, so the default command line stays as it was.
+    if (o.sounds.music != 100) args.insert(args.end(), {"--music-volume", wxString::Format("%d", o.sounds.music)});
+    if (o.sounds.effects != 100) args.insert(args.end(), {"--sfx-volume", wxString::Format("%d", o.sounds.effects)});
     // The original's own command-line switches, passed on as the port receives them.
     if (o.noMouse) args.push_back("nomouse");
     if (o.demo) args.push_back("demo");

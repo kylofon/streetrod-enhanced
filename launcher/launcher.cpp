@@ -1,17 +1,23 @@
-// launcher.cpp -- the launcher window.
+// launcher.cpp -- the launcher window, its menus and the Sounds page.
 #include "launcher.h"
 
 #include <wx/artprov.h>
 #include <wx/button.h>
 #include <wx/checkbox.h>
 #include <wx/choice.h>
+#include <wx/dialog.h>
 #include <wx/dirdlg.h>
 #include <wx/filedlg.h>
 #include <wx/filename.h>
 #include <wx/hyperlink.h>
+#include <wx/menu.h>
 #include <wx/msgdlg.h>
+#include <wx/panel.h>
 #include <wx/settings.h>
+#include <wx/simplebook.h>
 #include <wx/sizer.h>
+#include <wx/slider.h>
+#include <wx/spinctrl.h>
 #include <wx/statbmp.h>
 #include <wx/statbox.h>
 #include <wx/stattext.h>
@@ -33,6 +39,11 @@ namespace {
 const char* const WEBSITE = "https://kkania.com";
 const char* const SUPPORT = "https://buymeacoffee.com/krzysztofkania";
 const char* const SECTION = "Game";
+const char* const SOUND = "Sound";
+
+const int ID_SOUNDS = wxID_HIGHEST + 1, ID_ABOUT = wxID_HIGHEST + 2;
+// The book's pages.
+const int PAGE_MAIN = 0, PAGE_SOUNDS = 1;
 
 const int MIN_SCALE = 1, MAX_SCALE = 6, DEFAULT_SCALE = 3;
 const int MIN_RES = 2, MAX_RES = 8, DEFAULT_RES = 4;     // --res-scale
@@ -74,20 +85,99 @@ wxTextCtrl* PathRow(wxWindow* parent, wxFlexGridSizer* grid, const wxString& lab
     return text;
 }
 
+// A label, a slider, a number field and a note in a row of a four-column grid; the slider and the field
+// follow each other.
+void SliderRow(wxWindow* parent, wxFlexGridSizer* grid, const wxString& label, const wxString& note,
+               const wxString& tip, int min, int max, int step, wxSlider** slider, wxSpinCtrl** spin) {
+    grid->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
+    *slider = new wxSlider(parent, wxID_ANY, min, min, max, wxDefaultPosition, wxSize(parent->FromDIP(220), -1));
+    (*slider)->SetPageSize(step);
+    (*slider)->SetLineSize(1);
+    (*slider)->SetToolTip(tip);
+    *spin = new wxSpinCtrl(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(parent->FromDIP(64), -1),
+                           wxSP_ARROW_KEYS, min, max, min);
+    (*spin)->SetToolTip(tip);
+    grid->Add(*slider, 0, wxALIGN_CENTER_VERTICAL | wxEXPAND);
+    grid->Add(*spin, 0, wxALIGN_CENTER_VERTICAL);
+    grid->Add(GreyText(parent, note), 0, wxALIGN_CENTER_VERTICAL);
+    wxSlider* s = *slider;
+    wxSpinCtrl* n = *spin;
+    s->Bind(wxEVT_SLIDER, [s, n](wxCommandEvent&) { n->SetValue(s->GetValue()); });
+    n->Bind(wxEVT_SPINCTRL, [s, n](wxSpinEvent&) { s->SetValue(n->GetValue()); });
+    // A typed number moves the slider as it is typed (the field keeps it in range when it loses focus).
+    n->Bind(wxEVT_TEXT, [s, n](wxCommandEvent& event) {
+        long v;
+        if (event.GetString().ToLong(&v) && v >= n->GetMin() && v <= n->GetMax()) s->SetValue(static_cast<int>(v));
+        event.Skip();
+    });
+}
+
 wxString SavesText(int n) {
     return n == 0 ? wxString("no saved games") : n == 1 ? wxString("1 saved game") : wxString::Format("%d saved games", n);
 }
 
 }  // namespace
 
-LauncherDialog::LauncherDialog()
-    : wxDialog(nullptr, wxID_ANY, APP_TITLE, wxDefaultPosition, wxDefaultSize,
-               wxDEFAULT_DIALOG_STYLE | wxMINIMIZE_BOX) {
+LauncherFrame::LauncherFrame()
+    : wxFrame(nullptr, wxID_ANY, APP_TITLE, wxDefaultPosition, wxDefaultSize,
+              wxDEFAULT_FRAME_STYLE & ~(wxRESIZE_BORDER | wxMAXIMIZE_BOX)) {
     SetIcons(AppIcons());
+    topmost_ = settings::GetInt("Preferences", "AlwaysOnTop", 0) != 0;
+    if (topmost_) SetWindowStyleFlag(GetWindowStyleFlag() | wxSTAY_ON_TOP);
+    sounds_.music = wxMax(0, wxMin(100, settings::GetInt(SOUND, "MusicVolume", sounds_.music)));
+    sounds_.effects = wxMax(0, wxMin(100, settings::GetInt(SOUND, "EffectsVolume", sounds_.effects)));
+
+    // The launcher and, in its place while one is open, a settings page (PAGE_*).
+    book_ = new wxSimplebook(this);
+    book_->AddPage(CreateMainPage(book_), "Game");
+    book_->AddPage(CreateSoundsPage(book_), "Sounds");
+    auto* all = new wxBoxSizer(wxVERTICAL);
+    all->Add(book_, 1, wxEXPAND);
+    SetSizer(all);
+    CreateMenus();
+
+    // Settings from the last run.
+    wxString dir = settings::GetString(SECTION, "GameFolder", "");
+    wxString program = settings::GetString(SECTION, "Program", "");
+    folder_->ChangeValue(dir.empty() ? DefaultGameDir() : dir);
+    program_->ChangeValue(program.empty() ? DefaultProgram() : program);
+    // The data disk's cars are the default (key "Cars": 1 = data disk, 0 = original). Launchers before
+    // 0.1.0 stored DataDisk=0 without asking; that old key is no longer read.
+    cars_->SetSelection(settings::GetInt(SECTION, "Cars", 1) != 0 ? 1 : 0);
+    demo_->SetValue(settings::GetInt(SECTION, "Demo", 0) != 0);
+    autoDrive_->SetValue(settings::GetInt(SECTION, "Auto", 0) != 0);
+    noMouse_->SetValue(settings::GetInt(SECTION, "NoMouse", 0) != 0);
+    scale_->SetSelection(
+        wxMax(MIN_SCALE, wxMin(MAX_SCALE, settings::GetInt(SECTION, "Scale", DEFAULT_SCALE))) - MIN_SCALE);
+    fullscreen_->SetValue(settings::GetInt(SECTION, "Fullscreen", 0) != 0);
+    graphics_->SetSelection(settings::GetInt(SECTION, "Classic", 0) != 0 ? 1 : 0);
+    resolution_->SetSelection(
+        wxMax(MIN_RES, wxMin(MAX_RES, settings::GetInt(SECTION, "ResScale", DEFAULT_RES))) - MIN_RES);
+    aa_->SetSelection(wxMax(1, wxMin(MAX_AA, settings::GetInt(SECTION, "AA", DEFAULT_AA))) - 1);
+    town_->SetValue(settings::GetInt(SECTION, "Town", 1) != 0);
+    ShowSounds(sounds_);
+    loading_ = false;
+    UpdateState();
+
+    Bind(wxEVT_ACTIVATE, [this](wxActivateEvent& event) {
+        if (event.GetActive()) UpdateState();  // files may have been copied in, games saved meanwhile
+        event.Skip();
+    });
+    Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent&) {
+        Save();
+        Destroy();
+    });
+
+    FitPage();
+    if (!settings::RestoreWindowPosition(SECTION, this)) Centre();
+}
+
+wxWindow* LauncherFrame::CreateMainPage(wxWindow* parent) {
+    auto* page = new wxPanel(parent);
     const int margin = FromDIP(12), gap = FromDIP(8), small = FromDIP(4);
 
     // Game files
-    auto* filesBox = new wxStaticBoxSizer(wxVERTICAL, this, "Game files");
+    auto* filesBox = new wxStaticBoxSizer(wxVERTICAL, page, "Game files");
     wxWindow* fb = filesBox->GetStaticBox();
     auto* filesGrid = new wxFlexGridSizer(2, gap, gap);
     filesGrid->AddGrowableCol(1);
@@ -113,7 +203,7 @@ LauncherDialog::LauncherDialog()
     browseProgram->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { BrowseProgram(); });
 
     // Start
-    auto* startBox = new wxStaticBoxSizer(wxVERTICAL, this, "Start");
+    auto* startBox = new wxStaticBoxSizer(wxVERTICAL, page, "Start");
     wxWindow* sb = startBox->GetStaticBox();
     auto* carsRow = new wxBoxSizer(wxHORIZONTAL);
     carsRow->Add(new wxStaticText(sb, wxID_ANY, "&Cars:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, gap);
@@ -143,7 +233,7 @@ LauncherDialog::LauncherDialog()
     cars_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { UpdateState(); });
 
     // Options
-    auto* optionsBox = new wxStaticBoxSizer(wxVERTICAL, this, "Options");
+    auto* optionsBox = new wxStaticBoxSizer(wxVERTICAL, page, "Options");
     wxWindow* ob = optionsBox->GetStaticBox();
     auto* grid = new wxFlexGridSizer(2, gap, gap);
     grid->Add(new wxStaticText(ob, wxID_ANY, "&Window size:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -156,7 +246,7 @@ LauncherDialog::LauncherDialog()
     optionsBox->Add(fullscreen_, 0, wxALL, gap);
 
     // Keys
-    auto* keysBox = new wxStaticBoxSizer(wxVERTICAL, this, "Keys in the game");
+    auto* keysBox = new wxStaticBoxSizer(wxVERTICAL, page, "Keys in the game");
     wxWindow* kb = keysBox->GetStaticBox();
     auto* keys = new wxFlexGridSizer(2, small, FromDIP(16));
     const char* const KEYS[][2] = {
@@ -184,7 +274,7 @@ LauncherDialog::LauncherDialog()
     keysBox->Add(keys, 0, wxALL, gap);
 
     // Picture: the enhanced road view
-    auto* pictureBox = new wxStaticBoxSizer(wxVERTICAL, this, "Picture");
+    auto* pictureBox = new wxStaticBoxSizer(wxVERTICAL, page, "Picture");
     wxWindow* pb = pictureBox->GetStaticBox();
     auto* pgrid = new wxFlexGridSizer(2, gap, gap);
     pgrid->Add(new wxStaticText(pb, wxID_ANY, "&Graphics:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -212,16 +302,12 @@ LauncherDialog::LauncherDialog()
 
     // Buttons
     auto* buttons = new wxBoxSizer(wxHORIZONTAL);
-    auto* about = new wxButton(this, wxID_ABOUT, "&About");
-    play_ = new wxButton(this, wxID_ANY, "&Play");
-    auto* close = new wxButton(this, wxID_CLOSE, "Close");
-    buttons->Add(about);
+    play_ = new wxButton(page, wxID_ANY, "&Play");
+    auto* close = new wxButton(page, wxID_CLOSE, "Close");
     buttons->AddStretchSpacer();
     buttons->Add(play_, 0, wxRIGHT, gap);
     buttons->Add(close);
     play_->SetDefault();
-    SetEscapeId(wxID_CLOSE);
-    about->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { About(); });
     play_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Play(); });
     close->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Close(); });
 
@@ -239,49 +325,117 @@ LauncherDialog::LauncherDialog()
     auto* all = new wxBoxSizer(wxVERTICAL);
     all->Add(columns, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, margin);
     all->Add(buttons, 0, wxEXPAND | wxALL, margin);
-    SetSizer(all);
-
-    // Settings from the last run.
-    wxString dir = settings::GetString(SECTION, "GameFolder", "");
-    wxString program = settings::GetString(SECTION, "Program", "");
-    folder_->ChangeValue(dir.empty() ? DefaultGameDir() : dir);
-    program_->ChangeValue(program.empty() ? DefaultProgram() : program);
-    // The data disk's cars are the default (key "Cars": 1 = data disk, 0 = original). Launchers before
-    // 0.1.0 stored DataDisk=0 without asking; that old key is no longer read.
-    cars_->SetSelection(settings::GetInt(SECTION, "Cars", 1) != 0 ? 1 : 0);
-    demo_->SetValue(settings::GetInt(SECTION, "Demo", 0) != 0);
-    autoDrive_->SetValue(settings::GetInt(SECTION, "Auto", 0) != 0);
-    noMouse_->SetValue(settings::GetInt(SECTION, "NoMouse", 0) != 0);
-    scale_->SetSelection(
-        wxMax(MIN_SCALE, wxMin(MAX_SCALE, settings::GetInt(SECTION, "Scale", DEFAULT_SCALE))) - MIN_SCALE);
-    fullscreen_->SetValue(settings::GetInt(SECTION, "Fullscreen", 0) != 0);
-    graphics_->SetSelection(settings::GetInt(SECTION, "Classic", 0) != 0 ? 1 : 0);
-    resolution_->SetSelection(
-        wxMax(MIN_RES, wxMin(MAX_RES, settings::GetInt(SECTION, "ResScale", DEFAULT_RES))) - MIN_RES);
-    aa_->SetSelection(wxMax(1, wxMin(MAX_AA, settings::GetInt(SECTION, "AA", DEFAULT_AA))) - 1);
-    town_->SetValue(settings::GetInt(SECTION, "Town", 1) != 0);
-    loading_ = false;
-    UpdateState();
-
-    Bind(wxEVT_ACTIVATE, [this](wxActivateEvent& event) {
-        if (event.GetActive()) UpdateState();  // files may have been copied in, games saved meanwhile
-        event.Skip();
-    });
-    Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent&) {
-        Save();
-        Destroy();
-    });
-
-    Fit();
-    if (!settings::RestoreWindowPosition(SECTION, this)) Centre();
+    page->SetSizer(all);
+    return page;
 }
 
-wxString LauncherDialog::PlayFolder() const {
+wxWindow* LauncherFrame::CreateSoundsPage(wxWindow* parent) {
+    auto* page = new wxPanel(parent);
+    const int margin = FromDIP(12), gap = FromDIP(8), small = FromDIP(4);
+
+    auto* volumeBox = new wxStaticBoxSizer(wxVERTICAL, page, "Volume");
+    wxWindow* vb = volumeBox->GetStaticBox();
+    auto* grid = new wxFlexGridSizer(4, small, gap);
+    grid->AddGrowableCol(1);
+    SliderRow(vb, grid, "&Music:", "% (the background tune)",
+              "The volume of the background tune of the garage and the town. M switches the music on and off "
+              "in the game.",
+              0, 100, 10, &musicSlider_, &musicField_);
+    SliderRow(vb, grid, "Sound &effects:", "% (the engine, clicks, crashes, garage tools)",
+              "The volume of everything else: the engine and the police siren, the tyres, crashes, the "
+              "buttons' clicks and the garage's tools.",
+              0, 100, 10, &effectsSlider_, &effectsField_);
+    volumeBox->Add(grid, 0, wxEXPAND | wxALL, gap);
+
+    auto* buttons = new wxBoxSizer(wxHORIZONTAL);
+    auto* defaults = new wxButton(page, wxID_ANY, "&Default");
+    defaults->SetToolTip("Put both volumes back to 100 %.");
+    auto* apply = new wxButton(page, wxID_APPLY, "&Apply");
+    apply->SetToolTip("Keep these volumes and go back.");
+    auto* cancel = new wxButton(page, wxID_CANCEL, "Cancel");
+    cancel->SetToolTip("Go back without changing the volumes.");
+    buttons->Add(defaults);
+    buttons->AddStretchSpacer();
+    buttons->Add(apply, 0, wxRIGHT, gap);
+    buttons->Add(cancel);
+    defaults->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ShowSounds(Sounds()); });
+    apply->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        sounds_ = EditedSounds();
+        settings::SetInt(SOUND, "MusicVolume", sounds_.music);
+        settings::SetInt(SOUND, "EffectsVolume", sounds_.effects);
+        ClosePage();
+    });
+    cancel->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ClosePage(); });
+
+    auto* all = new wxBoxSizer(wxVERTICAL);
+    all->Add(volumeBox, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, margin);
+    all->Add(buttons, 0, wxEXPAND | wxALL, margin);
+    page->SetSizer(all);
+    return page;
+}
+
+void LauncherFrame::ShowSounds(const Sounds& s) {
+    musicField_->SetValue(s.music);
+    musicSlider_->SetValue(s.music);
+    effectsField_->SetValue(s.effects);
+    effectsSlider_->SetValue(s.effects);
+}
+
+Sounds LauncherFrame::EditedSounds() const {
+    // The sliders have the numbers as typed, even while a field hasn't taken its number yet.
+    Sounds s;
+    s.music = musicSlider_->GetValue();
+    s.effects = effectsSlider_->GetValue();
+    return s;
+}
+
+void LauncherFrame::CreateMenus() {
+    auto* file = new wxMenu;
+    file->Append(wxID_PREFERENCES, wxString::FromUTF8("&Preferences…"));
+    file->AppendSeparator();
+    file->Append(wxID_EXIT, "E&xit\tAlt+F4");
+    auto* settingsMenu = new wxMenu;
+    settingsMenu->Append(ID_SOUNDS, wxString::FromUTF8("&Sounds…"));
+
+    auto* bar = new wxMenuBar;
+    bar->Append(file, "&File");
+    bar->Append(settingsMenu, "&Game settings");
+#ifndef __WXMSW__
+    auto* about = new wxMenu;
+    about->Append(ID_ABOUT, wxString::FromUTF8("&About ") + APP_TITLE + wxString::FromUTF8("…"));
+    bar->Append(about, "A&bout");
+#endif
+    SetMenuBar(bar);
+#ifdef __WXMSW__
+    // A top-level About item that acts straight away, which wxWidgets menus
+    // can't express; MSWWindowProc handles its command.
+    const HMENU native = static_cast<HMENU>(bar->GetHMenu());
+    AppendMenuW(native, MF_STRING, ID_ABOUT, L"A&bout");
+    DrawMenuBar(static_cast<HWND>(GetHWND()));
+#endif
+
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(); }, wxID_EXIT);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { Preferences(); }, wxID_PREFERENCES);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { OpenPage(PAGE_SOUNDS); }, ID_SOUNDS);
+    Bind(wxEVT_MENU, [this](wxCommandEvent&) { About(); }, ID_ABOUT);
+}
+
+#ifdef __WXMSW__
+WXLRESULT LauncherFrame::MSWWindowProc(WXUINT msg, WXWPARAM wParam, WXLPARAM lParam) {
+    if (msg == WM_COMMAND && LOWORD(wParam) == ID_ABOUT && lParam == 0) {
+        CallAfter([this] { About(); });
+        return 0;
+    }
+    return wxFrame::MSWWindowProc(msg, wParam, lParam);
+}
+#endif
+
+wxString LauncherFrame::PlayFolder() const {
     if (cars_->GetSelection() == 1 && !game_.dataDisk.empty()) return game_.dataDisk;
     return folder_->GetValue();
 }
 
-void LauncherDialog::UpdateState() {
+void LauncherFrame::UpdateState() {
     const wxString dir = folder_->GetValue(), program = program_->GetValue();
     game_ = ReadGameFolder(dir);
     const bool dosProgram = IsDosProgram(program);
@@ -322,17 +476,17 @@ void LauncherDialog::UpdateState() {
     resolution_->Enable(enhanced);
     aa_->Enable(enhanced);
     town_->Enable(enhanced);
-    Layout();
-    Fit();
+    book_->GetPage(PAGE_MAIN)->Layout();
+    if (book_->GetSelection() == PAGE_MAIN) FitPage();  // the notes change the page's size
 }
 
-void LauncherDialog::BrowseFolder() {
+void LauncherFrame::BrowseFolder() {
     wxDirDialog dialog(this, "Choose the folder with the game's files", folder_->GetValue(),
                        wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
     if (dialog.ShowModal() == wxID_OK) folder_->SetValue(dialog.GetPath());  // raises wxEVT_TEXT
 }
 
-void LauncherDialog::BrowseProgram() {
+void LauncherFrame::BrowseProgram() {
     wxFileName current(program_->GetValue());
 #ifdef __WXMSW__
     const char* const filter = "Programs (*.exe)|*.exe|All files (*.*)|*.*";
@@ -344,7 +498,7 @@ void LauncherDialog::BrowseProgram() {
     if (dialog.ShowModal() == wxID_OK) program_->SetValue(dialog.GetPath());  // raises wxEVT_TEXT
 }
 
-void LauncherDialog::Play() {
+void LauncherFrame::Play() {
     Save();
     GameOptions options;
     options.program = wxFileName(program_->GetValue()).GetFullPath();
@@ -358,11 +512,12 @@ void LauncherDialog::Play() {
     options.resScale = resolution_->GetSelection() + MIN_RES;
     options.aa = aa_->GetSelection() + 1;
     options.town = town_->GetValue();
+    options.sounds = sounds_;
     wxString error;
     if (!LaunchGame(options, error)) wxMessageBox(error, APP_TITLE, wxOK | wxICON_ERROR, this);
 }
 
-void LauncherDialog::Save() {
+void LauncherFrame::Save() {
     // A folder or program left at its default is stored empty, so it follows the launcher if it moves.
     const wxString dir = folder_->GetValue(), program = program_->GetValue();
     settings::SetString(SECTION, "GameFolder",
@@ -382,7 +537,56 @@ void LauncherDialog::Save() {
     settings::SaveWindowPosition(SECTION, this);
 }
 
-void LauncherDialog::About() {
+void LauncherFrame::Preferences() {
+    wxDialog dialog(this, wxID_ANY, "Preferences");
+    auto* all = new wxBoxSizer(wxVERTICAL);
+    auto* topmost = new wxCheckBox(&dialog, wxID_ANY, "Always on &top");
+    topmost->SetValue(topmost_);
+    topmost->SetToolTip("Keep the launcher above other windows.");
+    all->Add(topmost, 0, wxALL, dialog.FromDIP(12));
+    all->Add(dialog.CreateStdDialogButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM,
+             dialog.FromDIP(12));
+    dialog.SetSizerAndFit(all);
+    dialog.SetMinSize(wxSize(dialog.FromDIP(300), -1));
+    dialog.Fit();
+    dialog.CentreOnParent();
+    topmost->SetFocus();
+    if (dialog.ShowModal() != wxID_OK) return;
+    if (topmost->GetValue() != topmost_) SetTopmost(topmost->GetValue());
+}
+
+void LauncherFrame::SetTopmost(bool on) {
+    topmost_ = on;
+    const long style = GetWindowStyleFlag();
+    SetWindowStyleFlag(on ? style | wxSTAY_ON_TOP : style & ~wxSTAY_ON_TOP);
+    settings::SetInt("Preferences", "AlwaysOnTop", on ? 1 : 0);
+}
+
+// The window takes the size of the page shown (the book on its own would take the largest page's).
+void LauncherFrame::FitPage() {
+    SetClientSize(book_->GetCurrentPage()->GetBestSize());
+}
+
+// A settings page starts from the saved settings; the menu's page waits until it is closed.
+void LauncherFrame::OpenPage(int page) {
+    if (book_->GetSelection() == page) return;
+    ShowSounds(sounds_);
+    book_->ChangeSelection(page);
+    FitPage();
+    GetMenuBar()->Enable(ID_SOUNDS, false);
+    SetDefaultItem(book_->GetPage(page)->FindWindow(wxID_APPLY));
+    musicSlider_->SetFocus();
+}
+
+void LauncherFrame::ClosePage() {
+    book_->ChangeSelection(PAGE_MAIN);
+    UpdateState();  // fits the window to the main page
+    GetMenuBar()->Enable(ID_SOUNDS, true);
+    SetDefaultItem(play_);
+    play_->SetFocus();
+}
+
+void LauncherFrame::About() {
     const wxString title = wxString("About ") + APP_TITLE;
     const wxString heading = wxString(APP_TITLE) + " " + APP_VERSION_TEXT;
     const wxString blurb = "Starts streetrod-enhanced, Street Rod (California Dreams, 1989) on SDL3, enhanced.";

@@ -25,6 +25,12 @@ wxString DefaultProgram();
 // can't start it, and it isn't the port.
 bool IsDosProgram(const wxString& path);
 
+// Game settings > Sounds: the volumes in percent, 0..100.
+struct Sounds {
+    int music = 100;        // --music-volume: the background tune
+    int effects = 100;      // --sfx-volume: the effects, the engine and the garage's loop sounds
+};
+
 struct GameOptions {
     wxString program;       // streetrod-enhanced(.exe)
     wxString gameDir;       // --game-dir
@@ -37,6 +43,7 @@ struct GameOptions {
     int resScale = 4;       // --res-scale: the picture is 320x200 times this
     int aa = 2;             // --aa: anti-aliasing, aa x aa samples per pixel
     bool town = true;       // --town on|off: the drives through town enhanced too
+    Sounds sounds;
 };
 
 // Starts the game. On failure returns false and says why in `error`.

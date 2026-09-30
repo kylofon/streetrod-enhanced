@@ -9,7 +9,7 @@ III Enhanced (TD2E, TD3E).
 The goal of this version is **higher resolution and a longer draw distance** for the racing view. Smooth motion
 comes along with it: at 8 frames a second, a high-resolution picture only makes the stepping more visible.
 
-## Status (0.1.0)
+## Status (0.2.0)
 
 Stage 1 is done; stage 2 (the longer draw distance) is not started.
 

@@ -160,12 +160,17 @@ static Uint64 out2_next;                /* clock of the next OUT2 transition (ga
 
 static Uint64 r_pos;                    /* rendered up to, in clock * AUDIO_RATE units */
 static Uint64 r_sample_end = PIT_HZ;    /* end of the sample being integrated (same units) */
-static Uint64 r_acc;                    /* high time inside that sample (same units) */
+static Uint64 r_acc;                    /* high time x volume (percent) inside that sample (same units) */
 static double hp_x1, hp_y1, lp_z;
 static s16 r_buf[2048];
 static int r_n;
 static FILE *dump_f;
 static u32 dump_samples;
+/* Volumes in percent (--music-volume / --sfx-volume) and the one that applies to the level now: the
+ * speaker is one channel, so each stretch of it takes the volume of the source that last wrote it. */
+static int vol_music = 100, vol_effects = 100;
+static bool src_music;
+static int vol_now = 100;
 
 static u32 half_period(u32 count, bool high)
 {
@@ -229,7 +234,7 @@ static void render_to(Uint64 clk)
         bool gate = port61 & 1;
         Uint64 end = SDL_min(target, r_sample_end);
         if (gate) end = SDL_min(end, out2_next * AUDIO_RATE);
-        if ((port61 & 2) && (!gate || out2)) r_acc += end - r_pos;
+        if ((port61 & 2) && (!gate || out2)) r_acc += (end - r_pos) * (Uint64)vol_now;
         r_pos = end;
         if (gate && r_pos == out2_next * AUDIO_RATE) {
             out2 = !out2;
@@ -237,7 +242,7 @@ static void render_to(Uint64 clk)
             out2_next += half_period(pit2_count, out2);
         }
         if (r_pos == r_sample_end) {
-            emit_sample((double)r_acc / PIT_HZ);
+            emit_sample((double)r_acc / ((double)PIT_HZ * 100));
             r_acc = 0;
             r_sample_end += PIT_HZ;
         }
@@ -288,6 +293,22 @@ void host_port61(u8 value)
 }
 
 u8 host_port61_get(void) { return port61; }
+
+void host_set_volumes(int music, int effects)
+{
+    render_to(tl_now);
+    vol_music = SDL_clamp(music, 0, 100);
+    vol_effects = SDL_clamp(effects, 0, 100);
+    vol_now = src_music ? vol_music : vol_effects;
+}
+
+void host_speaker_source(bool music)
+{
+    if (music == src_music) return;
+    render_to(tl_now);                              /* what sounded so far keeps its volume */
+    src_music = music;
+    vol_now = music ? vol_music : vol_effects;
+}
 
 void host_speaker(u16 divisor, bool on)
 {

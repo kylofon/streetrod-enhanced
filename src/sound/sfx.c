@@ -116,6 +116,7 @@ static void fx_noise(s16 range, s16 ormask, s16 n)
     spk_off();
     if (n <= 0) return;
     do {
+        spk_source();
         host_port61((u8)(host_port61_get() ^ 2));
         host_busy_wait_ns(SND_NOISE_OVERHEAD_NS);           /* PORT: uncalibrated rnd call */
         delay((u16)(snd_rnd(range) | ormask));

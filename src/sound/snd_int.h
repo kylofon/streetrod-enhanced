@@ -28,19 +28,26 @@
 #define SEG_SONGS_BG  0x2E6B    /* file segments of the song data (use SEG()) */
 #define SEG_SONGS_FX  0x2F93
 
+/* True while the music sequencer plays the background tune (sound.c): its writes to the speaker take
+ * the music volume, all others (effects, loop sounds, the engine) the effects volume. */
+extern bool snd_music_writing;
+static inline void spk_source(void) { host_speaker_source(snd_music_writing); }
+
 /* The two speaker-gate idioms of the original (in al,61h / or al,3 | and ax,0FCh / out 61h,al,
  * then the DS_speaker_on mirror). */
 static inline void spk_gate_on(void)
 {
+    spk_source();
     host_port61((u8)(host_port61_get() | 3));
     DSB(DS_speaker_on) = 1;
 }
 static inline void spk_gate_off(void)
 {
+    spk_source();
     host_port61((u8)(host_port61_get() & 0xFC));
     DSB(DS_speaker_on) = 0;
 }
 /* out 42h, lo / out 42h, hi (channel 2 is in mode 3 from 43h = B6h). */
-static inline void pit2_div(u16 d) { host_pit2_divisor(d); }
+static inline void pit2_div(u16 d) { spk_source(); host_pit2_divisor(d); }
 
 int snd_rnd(int n);             /* the platform's rnd 0f38:5eb6 through snd_set_rnd */

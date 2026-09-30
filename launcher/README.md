@@ -25,11 +25,18 @@ like the Street Rod and Test Drive III launchers it is modelled on.
   (`--classic`); **Resolution** of the picture, 640 × 400 to 2560 × 1600 (`--res-scale`, default 1280 × 800);
   **Anti-aliasing** off, 2 × 2 (default), 3 × 3 or 4 × 4 (`--aa`); **Drives through town enhanced too**
   (`--town`). The last three are greyed out with the original graphics.
-* **Play** starts the game; the launcher stays open. **About**: version, author and links.
+* **Play** starts the game; the launcher stays open.
 
-Everything is remembered in `%APPDATA%\Street Rod Enhanced\settings.ini` (`~/.config/street-rod-enhanced` on Linux). A folder or
-program left at its default is stored empty, so it follows the launcher if the whole folder moves. Delete the
-file to go back to the defaults.
+## Menus
+
+* **File**: **Preferences** (**Always on top** keeps the launcher above other windows) and **Exit**.
+* **Game settings > Sounds**: **Music** (`--music-volume`) and **Sound effects** (`--sfx-volume`), 0 - 100 %,
+  each a slider and a number field. **Default**, **Apply**, **Cancel**.
+* **About**: version, author and links.
+
+Everything is remembered in `%APPDATA%\Street Rod Enhanced\settings.ini` (`~/.config/street-rod-enhanced` on Linux), the volumes
+under `[Sound]`. A folder or program left at its default is stored empty, so it follows the launcher if the whole
+folder moves. Delete the file to go back to the defaults.
 
 ## Building
 
@@ -45,7 +52,7 @@ launcher itself is linked in.
 ## Files
 
 * `app.cpp`: the wxWidgets application.
-* `launcher.h`, `launcher.cpp`: the window and the About box.
+* `launcher.h`, `launcher.cpp`: the window, its menus, the Sounds page and the About box.
 * `game.h`, `game.cpp`: the file checks, the data disk, saved games and starting the game.
 * `settings.h`, `settings.cpp`: `settings.ini`.
 * `icon.h`, `icon.cpp`: the app icon, Street Rod's night road drawn in code. `make_icon.py` (Pillow) writes the
