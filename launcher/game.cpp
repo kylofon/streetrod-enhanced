@@ -93,6 +93,8 @@ bool LaunchGame(const GameOptions& o, wxString& error) {
                                  "--aa", wxString::Format("%d", o.aa), "--town", o.town ? "on" : "off"});
         if (o.drawDistance != 60)
             args.insert(args.end(), {"--draw-distance", wxString::Format("%d", o.drawDistance)});
+        if (!o.reducedSky)
+            args.insert(args.end(), {"--reduced-sky-rotation", "off"});
     }
     // The volumes only when turned down, so the default command line stays as it was.
     if (o.sounds.music != 100) args.insert(args.end(), {"--music-volume", wxString::Format("%d", o.sounds.music)});

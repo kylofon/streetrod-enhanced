@@ -34,7 +34,6 @@
 #define Y_ROAD       0x7D0     /* world heights: the road, the eye (the top of a façade) */
 #define Y_EYE        0x76C
 #define OBJ_ROWS     10        /* road-side objects: the original's rows 1..10 */
-#define SKY_SCROLL   0.125     /* the sky and horizon scroll this fraction of the original's (heading x2, x4) */
 
 typedef struct {
     int base;                  /* segment the relative yaw / height are measured from */
@@ -145,7 +144,7 @@ static void draw_sky(const Cam *c, bool town, double *ground_y)
     }
     s16 h0 = (s16)trk(TRK_HGT, c->base);
     double hy = horizon_y(h0) + 4.0 * c->hpos;
-    double heading = ((s16)trk(TRK_YAW, c->base) + c->hv) * SKY_SCROLL;
+    double heading = ((s16)trk(TRK_YAW, c->base) + c->hv) * enh_opt.sky_scroll / 100.0;   /* --reduced-sky-rotation */
     enh_draw_sky(false, hy, heading);
     *ground_y = hy + 8;
 }

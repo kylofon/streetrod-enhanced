@@ -164,6 +164,7 @@ LauncherFrame::LauncherFrame()
         if (DRAW_DISTANCES[i] <= savedDist) distSel = i;
     drawDistance_->SetSelection(distSel);
     town_->SetValue(settings::GetInt(SECTION, "Town", 1) != 0);
+    reducedSky_->SetValue(settings::GetInt(SECTION, "ReducedSky", 1) != 0);
     ShowSounds(sounds_);
     loading_ = false;
     UpdateState();
@@ -319,6 +320,10 @@ wxWindow* LauncherFrame::CreateMainPage(wxWindow* parent) {
     drawDistance_->SetToolTip("How far down the road is drawn in races. Higher values let you see turns and opponents earlier.");
     pgrid->Add(drawDistance_, 0, wxALIGN_CENTER_VERTICAL);
     pictureBox->Add(pgrid, 0, wxLEFT | wxRIGHT | wxTOP, gap);
+    reducedSky_ = new wxCheckBox(pb, wxID_ANY, "Reduced s&kybox rotation");
+    reducedSky_->SetToolTip("The horizon turns a quarter as much as in the original, and the sky with it, which "
+                          "suits the longer draw distance. Off: as in the original.");
+    pictureBox->Add(reducedSky_, 0, wxLEFT | wxRIGHT | wxTOP, gap);
     town_ = new wxCheckBox(pb, wxID_ANY, "Drives through &town enhanced too");
     pictureBox->Add(town_, 0, wxALL, gap);
     graphics_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { UpdateState(); });
@@ -500,6 +505,7 @@ void LauncherFrame::UpdateState() {
     aa_->Enable(enhanced);
     drawDistance_->Enable(enhanced);
     town_->Enable(enhanced);
+    reducedSky_->Enable(enhanced);
     book_->GetPage(PAGE_MAIN)->Layout();
     if (book_->GetSelection() == PAGE_MAIN) FitPage();  // the notes change the page's size
 }
@@ -538,6 +544,7 @@ void LauncherFrame::Play() {
     options.aa = aa_->GetSelection() + 1;
     options.drawDistance = DRAW_DISTANCES[drawDistance_->GetSelection()];
     options.town = town_->GetValue();
+    options.reducedSky = reducedSky_->GetValue();
     options.sounds = sounds_;
     wxString error;
     if (!LaunchGame(options, error)) wxMessageBox(error, APP_TITLE, wxOK | wxICON_ERROR, this);
@@ -562,6 +569,7 @@ void LauncherFrame::Save() {
     settings::SetInt(SECTION, "AA", aa_->GetSelection() + 1);
     settings::SetInt(SECTION, "DrawDistance", DRAW_DISTANCES[drawDistance_->GetSelection()]);
     settings::SetInt(SECTION, "Town", town_->GetValue() ? 1 : 0);
+    settings::SetInt(SECTION, "ReducedSky", reducedSky_->GetValue() ? 1 : 0);
     settings::SaveWindowPosition(SECTION, this);
 }
 

@@ -33,8 +33,10 @@ Stage 1 is done; stage 2 (the longer draw distance) is done without the haze.
   * **Motion from the physics.** In a race the cars move in `race_phys_step`, every 12th tick, not once per
     frame (9 ticks). Their road positions are interpolated between physics steps (`enh_phys_step`); the
     camera's lateral position and heading between frames.
-  * **Sky scroll.** The sky and the horizon panorama scroll an eighth of the original's rate (`SKY_SCROLL`):
-    tied to the heading as in the original, they raced across the screen when steering.
+  * **Sky scroll.** `--reduced-sky-rotation` (on by default): the horizon panorama turns with the heading at a
+    quarter of the original's rate, and the sky with it (both are at infinity: turning moves them alike). Off:
+    the original's, the sky x2 and the horizon x4 the heading, which race across the screen and look wrong
+    over the longer road ahead.
   * **Largest sizes.** Road-side shapes use the most detailed of the original's sizes, scaled by depth, and step
     down to the smaller ones only where its lines would be thinner than a sample; signs use the largest
     pre-scaled picture; the cars their native pictures, scaled to fit the original's shrunk views (at most 1.3

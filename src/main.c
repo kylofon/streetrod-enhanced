@@ -17,6 +17,8 @@
  *   --motion-delay N  percent of a game frame the smooth view runs behind the game, 0..100 (default 100)
  *   --town on|off     enhance the town cruise too (default on)
  *   --draw-distance N road segments drawn ahead, 15..120 (default 60; the original draws 15)
+ *   --reduced-sky-rotation on|off  the horizon turns a quarter as much as in the original, the sky with it
+ *                     (default on)
  *   the original's command-line switches are passed on as they are: 1, nomouse, demo, auto, nouemem
  *   (platform.md §5.1)
  */
@@ -75,6 +77,7 @@ int main(int argc, char **argv)
     int music_volume = 100, sfx_volume = 100;
     int res_scale = -1, aa = ENH_DEFAULT_AA, motion_delay = ENH_DEFAULT_MOTION_DELAY;
     int draw_distance = ENH_DEFAULT_DRAW_DISTANCE;
+    int sky_scroll = ENH_REDUCED_SKY_SCROLL;
     int target_fps = -1;
     bool vsync = true;
     char *game_argv[MAX_GAME_ARGS + 1] = { argv[0] };
@@ -93,6 +96,10 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--motion-delay") && v) { motion_delay = atoi(v); i++; }
         else if (!strcmp(a, "--town") && v) { town = strcmp(v, "off") != 0; i++; }
         else if (!strcmp(a, "--draw-distance") && v) { draw_distance = atoi(v); i++; }
+        else if (!strcmp(a, "--reduced-sky-rotation") && v) {
+            sky_scroll = strcmp(v, "off") != 0 ? ENH_REDUCED_SKY_SCROLL : 100;
+            i++;
+        }
         else if (!strcmp(a, "--fps") && v) {
             char *end;
             long n = strtol(v, &end, 10);
@@ -122,6 +129,7 @@ int main(int argc, char **argv)
 
     if (res_scale < 0) res_scale = classic ? 1 : ENH_DEFAULT_RES_SCALE;
     enh_init(!classic, res_scale, aa, motion_delay, town, draw_distance);
+    enh_set_sky_scroll(sky_scroll);
     host_set_fps(target_fps);
     host_set_vsync(vsync);
     if (!host_init(dir, scale, fullscreen)) return 1;

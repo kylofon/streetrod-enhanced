@@ -11,7 +11,8 @@
 #include "host.h"
 #include "platform/ega.h"
 
-EnhOptions enh_opt = { false, 1, ENH_DEFAULT_AA, ENH_DEFAULT_MOTION_DELAY, true, ENH_DEFAULT_DRAW_DISTANCE };
+EnhOptions enh_opt = { false, 1, ENH_DEFAULT_AA, ENH_DEFAULT_MOTION_DELAY, true, ENH_DEFAULT_DRAW_DISTANCE,
+                       ENH_REDUCED_SKY_SCROLL };
 
 /* A smoothly interpolated series of samples: [0] = the newest, [1] and [2] the ones before. */
 #define SER_N 5
@@ -74,6 +75,7 @@ void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town, 
 }
 
 bool enh_enabled(void) { return enh_opt.enabled; }
+void enh_set_sky_scroll(int percent) { enh_opt.sky_scroll = SDL_clamp(percent, 0, 100); }
 int  enh_res_scale(void) { return enh_opt.res_scale; }
 
 void enh_race_begin(void)

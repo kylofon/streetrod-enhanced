@@ -26,8 +26,8 @@ like the Street Rod and Test Drive III launchers it is modelled on.
 * **Picture**: **Graphics** enhanced (the smooth, high-resolution road view, the default) or original
   (`--classic`); **Resolution** of the picture, 640 × 400 to 2560 × 1600 (`--res-scale`, default 1280 × 800);
   **Anti-aliasing** off, 2 × 2 (default), 3 × 3 or 4 × 4 (`--aa`); **Draw distance** the original's, 4 × (default)
-  or 8 × (`--draw-distance` 15, 60, 120); **Drives through town enhanced too** (`--town`). The last four are
-  greyed out with the original graphics.
+  or 8 × (`--draw-distance` 15, 60, 120); **Reduced skybox rotation** (`--reduced-sky-rotation`, default on);
+  **Drives through town enhanced too** (`--town`). The last five are greyed out with the original graphics.
 * **Play** starts the game; the launcher stays open.
 
 ## Menus

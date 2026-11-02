@@ -18,11 +18,16 @@
 #define ENH_DEFAULT_DRAW_DISTANCE 60   /* road segments ahead (original is 14/15) */
 #define ENH_MIN_DRAW_DISTANCE     15
 #define ENH_MAX_DRAW_DISTANCE     120
+#define ENH_REDUCED_SKY_SCROLL    25     /* --reduced-sky-rotation: percent of the original's horizon turn */
 
 /* main.c: enabled = false is --classic (the original's picture, scaled by res_scale). res_scale 1..8,
  * aa 1..4, motion_delay 0..100, town = the town cruise is enhanced too, draw_distance 15..120. */
 void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town, int draw_distance);
 bool enh_enabled(void);
+/* The horizon turns with the heading at percent of the original's rate, and below 100 the sky with it:
+ * ENH_REDUCED_SKY_SCROLL with --reduced-sky-rotation on (the default: at the original's rate they look wrong over
+ * the longer road ahead), 100 with off */
+void enh_set_sky_scroll(int percent);
 int  enh_res_scale(void);
 
 /* race_run (race_drive.c): the road view starts (before road_race_init) and ends (the frame loop left). */
