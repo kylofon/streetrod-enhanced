@@ -85,6 +85,7 @@ bool LaunchGame(const GameOptions& o, wxString& error) {
                                "--game-dir", o.gameDir,
                                "--scale", wxString::Format("%d", o.scale)};
     if (o.fullscreen) args.push_back("--fullscreen");
+    if (o.uncapped) args.insert(args.end(), {"--fps", "0", "--vsync", "off"});
     if (o.classic) {
         args.push_back("--classic");
     } else {

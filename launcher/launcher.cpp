@@ -150,6 +150,7 @@ LauncherFrame::LauncherFrame()
     scale_->SetSelection(
         wxMax(MIN_SCALE, wxMin(MAX_SCALE, settings::GetInt(SECTION, "Scale", DEFAULT_SCALE))) - MIN_SCALE);
     fullscreen_->SetValue(settings::GetInt(SECTION, "Fullscreen", 0) != 0);
+    frameRate_->SetSelection(settings::GetInt(SECTION, "Uncapped", 0) != 0 ? 1 : 0);
     graphics_->SetSelection(settings::GetInt(SECTION, "Classic", 0) != 0 ? 1 : 0);
     resolution_->SetSelection(
         wxMax(MIN_RES, wxMin(MAX_RES, settings::GetInt(SECTION, "ResScale", DEFAULT_RES))) - MIN_RES);
@@ -241,6 +242,13 @@ wxWindow* LauncherFrame::CreateMainPage(wxWindow* parent) {
     for (int s = MIN_SCALE; s <= MAX_SCALE; ++s) scale_->Append(wxString::Format(L"%d × %d", 320 * s, 240 * s));
     scale_->SetToolTip("The window's size when the game starts. Alt+Enter switches to full screen.");
     grid->Add(scale_, 0, wxALIGN_CENTER_VERTICAL);
+    grid->Add(new wxStaticText(ob, wxID_ANY, "Fra&me rate:"), 0, wxALIGN_CENTER_VERTICAL);
+    frameRate_ = new wxChoice(ob, wxID_ANY);
+    frameRate_->Append("Display refresh rate (VSync)");
+    frameRate_->Append("Uncapped (no VSync)");
+    frameRate_->SetToolTip("The display's refresh rate: a new picture for every refresh, without tearing. "
+                           "Uncapped: as many pictures as the computer draws, which may tear.");
+    grid->Add(frameRate_, 0, wxALIGN_CENTER_VERTICAL);
     optionsBox->Add(grid, 0, wxLEFT | wxRIGHT | wxTOP, gap);
     fullscreen_ = new wxCheckBox(ob, wxID_ANY, "Start in f&ull screen (Alt+Enter switches)");
     optionsBox->Add(fullscreen_, 0, wxALL, gap);
@@ -508,6 +516,7 @@ void LauncherFrame::Play() {
     options.noMouse = noMouse_->GetValue();
     options.scale = scale_->GetSelection() + MIN_SCALE;
     options.fullscreen = fullscreen_->GetValue();
+    options.uncapped = frameRate_->GetSelection() == 1;
     options.classic = graphics_->GetSelection() == 1;
     options.resScale = resolution_->GetSelection() + MIN_RES;
     options.aa = aa_->GetSelection() + 1;
@@ -530,6 +539,7 @@ void LauncherFrame::Save() {
     settings::SetInt(SECTION, "NoMouse", noMouse_->GetValue() ? 1 : 0);
     settings::SetInt(SECTION, "Scale", scale_->GetSelection() + MIN_SCALE);
     settings::SetInt(SECTION, "Fullscreen", fullscreen_->GetValue() ? 1 : 0);
+    settings::SetInt(SECTION, "Uncapped", frameRate_->GetSelection() == 1 ? 1 : 0);
     settings::SetInt(SECTION, "Classic", graphics_->GetSelection() == 1 ? 1 : 0);
     settings::SetInt(SECTION, "ResScale", resolution_->GetSelection() + MIN_RES);
     settings::SetInt(SECTION, "AA", aa_->GetSelection() + 1);

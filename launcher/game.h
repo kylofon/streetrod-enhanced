@@ -39,6 +39,7 @@ struct GameOptions {
     bool noMouse = false;   // the game's "nomouse" switch
     int scale = 3;          // --scale: the window is 320x240 times this
     bool fullscreen = false;  // --fullscreen
+    bool uncapped = false;  // --fps 0 --vsync off: as many frames as the computer draws
     bool classic = false;   // --classic: the original's picture only
     int resScale = 4;       // --res-scale: the picture is 320x200 times this
     int aa = 2;             // --aa: anti-aliasing, aa x aa samples per pixel
