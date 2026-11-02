@@ -47,6 +47,63 @@ static u8 script_buttons;                   /* buttons held by the script, OR'd 
 
 static void process_events(void);
 
+static int opt_fps = -1;
+static bool opt_vsync = true;
+static bool vsync_active = false;                   /* asked for and the renderer has it */
+static Uint64 frame_interval_ns = 0;
+static Uint64 next_present_ns = 0;
+static bool display_rate_checked = false;
+
+void host_set_fps(int fps)
+{
+    opt_fps = fps;
+    display_rate_checked = false;
+}
+
+/* Sets the renderer's VSync. Should the renderer refuse it, a timer paces the frames instead. */
+static void apply_vsync(void)
+{
+    if (!renderer) return;
+    bool ok = SDL_SetRenderVSync(renderer, opt_vsync ? 1 : 0);
+    if (opt_vsync && !ok)
+        fprintf(stderr, "VSync not available (%s): frames paced by a timer\n", SDL_GetError());
+    vsync_active = opt_vsync && ok;
+    display_rate_checked = false;                   /* the pacing depends on it */
+}
+
+void host_set_vsync(bool vsync)
+{
+    opt_vsync = vsync;
+    apply_vsync();
+}
+
+/* The display's refresh rate in Hz, 0 when unknown. */
+static float display_refresh(void)
+{
+    if (!window) return 0;
+    const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
+    return mode && mode->refresh_rate >= 30.0f ? mode->refresh_rate : 0;
+}
+
+/* frame_interval_ns: 0 = every frame is presented (with VSync the present waits for the display, without
+ * it uncapped); otherwise presents are due on that grid. A timer on top of VSync makes presents miss their
+ * vblank (half or a third of the rate), so with VSync a cap at or above the refresh rate is left to the
+ * VSync; automatic without VSync is the refresh rate (when unknown: 165, or 60 if VSync was asked for but
+ * the renderer refused it). */
+static void update_display_refresh(void)
+{
+    if (display_rate_checked) return;
+    display_rate_checked = true;
+
+    int fps = opt_fps;                                  /* -1 = automatic, 0 = uncapped */
+    const char *fps_env = SDL_getenv("SR_FPS");
+    if (fps < 0 && fps_env) fps = SDL_max(SDL_atoi(fps_env), 0);
+    float hz = display_refresh();
+    if (fps < 0) fps = vsync_active ? 0 : hz > 0 ? (int)(hz + 0.5f) : opt_vsync ? 60 : 165;
+    if (fps > 0 && vsync_active && hz > 0 && fps >= hz - 1.0f) fps = 0;
+    frame_interval_ns = fps > 0 ? SDL_NS_PER_SECOND / (Uint64)fps : 0;
+}
+
 bool host_init(const char *dir, int window_scale, bool fullscreen)
 {
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
@@ -60,7 +117,7 @@ bool host_init(const char *dir, int window_scale, bool fullscreen)
         fprintf(stderr, "window/renderer failed: %s\n", SDL_GetError());
         return false;
     }
-    SDL_SetRenderVSync(renderer, 1);
+    apply_vsync();
     if (fullscreen) SDL_SetWindowFullscreen(window, true);
     host_set_frame_source(NULL, 320, 200);
 
@@ -99,6 +156,8 @@ void host_set_focus_lost_handler(void (*handler)(void)) { focus_lost_handler = h
 void host_set_frame_source(bool (*compose)(u32 *), int w, int h)
 {
     frame_source = compose;
+    next_present_ns = 0;
+    display_rate_checked = false;
     frame_w = SDL_clamp(w, 1, HOST_FRAME_MAX_W);
     frame_h = SDL_clamp(h, 1, HOST_FRAME_MAX_H);
     SDL_free(frame);
@@ -395,19 +454,43 @@ static void snapshot(void)
     SDL_DestroySurface(s);
 }
 
+/* Developer aid: SR_DEBUG_FPS, see host.h. One presented frame: started, texture uploaded, presented. */
+static void debug_fps_frame(Uint64 t_start, Uint64 t_tex, Uint64 t_pres)
+{
+    static Uint64 fps_last_ns;
+    static int fps_frames;
+    static Uint64 total_tex_ns, total_pres_ns;
+    if (fps_last_ns == 0) fps_last_ns = t_start;
+    fps_frames++;
+    total_tex_ns += t_tex - t_start;
+    total_pres_ns += t_pres - t_tex;
+    if (t_pres - fps_last_ns < SDL_NS_PER_SECOND) return;
+    double ms = (double)(t_pres - fps_last_ns) / 1e6;  /* since the last report */
+    fprintf(stderr, "[HOST FPS] %.1f FPS (avg frame: %.2f ms | tex: %.2f ms | pres: %.2f ms)\n",
+            fps_frames * 1000.0 / ms, ms / fps_frames, (double)total_tex_ns / fps_frames / 1e6,
+            (double)total_pres_ns / fps_frames / 1e6);
+    fps_frames = 0;
+    total_tex_ns = 0;
+    total_pres_ns = 0;
+    fps_last_ns = t_pres;
+}
+
 static void present(void)
 {
+    static int debug_fps = -1;
+    if (debug_fps < 0) debug_fps = SDL_getenv("SR_DEBUG_FPS") != NULL;
+    Uint64 t_start = debug_fps ? SDL_GetTicksNS() : 0;
     snapshot();
     if (!texture) return;
     SDL_UpdateTexture(texture, NULL, frame, frame_w * 4);
+    Uint64 t_tex = debug_fps ? SDL_GetTicksNS() : 0;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     SDL_FRect dst = { 0, 0, (float)VIEW_W(frame_w), (float)VIEW_H(frame_w) };
     SDL_RenderTexture(renderer, texture, NULL, &dst);
     SDL_RenderPresent(renderer);
+    if (debug_fps) debug_fps_frame(t_start, t_tex, SDL_GetTicksNS());
 }
-
-static Uint64 last_present_ns;
 
 /* Developer aid: SR_KEYS, see host.h. */
 void host_set_pointer_query(bool (*query)(s16 *x, s16 *y)) { pointer_query = query; }
@@ -541,18 +624,39 @@ void host_pump(void)
         clock_start_ns = now - (tick_due_ns(ticks_run) - clock_start_ns);
     }
 
-    /* Present at most once per ~8 ms; VSync paces it further. */
-    if (frame_source && now - last_present_ns >= 8 * SDL_NS_PER_MS) {
+    update_display_refresh();
+
+    /* Present pacing: with VSync (and no cap) every frame is presented and the present waits for the
+     * display (at most every 2 ms, should a driver's VSync not wait); with a cap, or without VSync,
+     * presents are due every frame_interval_ns. */
+    static Uint64 last_present_ns;
+    bool due = frame_interval_ns > 0 ? next_present_ns == 0 || now >= next_present_ns
+                                     : !vsync_active || now - last_present_ns >= 2 * SDL_NS_PER_MS;
+    if (frame_source && due) {
         if (frame_source(frame)) {
             present();
             last_present_ns = SDL_GetTicksNS();
+            if (frame_interval_ns > 0) {
+                /* on the grid; a frame that took longer than the interval is followed at once, not after
+                 * another whole interval */
+                next_present_ns = next_present_ns == 0 ? last_present_ns + frame_interval_ns
+                                                       : next_present_ns + frame_interval_ns;
+                if (next_present_ns < last_present_ns) next_present_ns = last_present_ns;
+            }
             worked = true;
+        } else {
+            next_present_ns = 0;    /* nothing new: the next change is shown at once, the grid starts there */
         }
     }
     if (!worked) {
-        Uint64 next = tick_due_ns(ticks_run + 1);
+        /* Wait for the next tick or present in steps of at most 1 ms. SDL_DelayPrecise: a plain sleep can
+         * overrun by a whole system timer period (15.6 ms on Windows), which caps the frame rate. */
+        Uint64 target = tick_due_ns(ticks_run + 1);
         now = SDL_GetTicksNS();
-        if (next > now) SDL_DelayNS(SDL_min(next - now, SDL_NS_PER_MS));
+        /* a present that is already due but had nothing new to show is no reason not to wait */
+        if (frame_source && frame_interval_ns > 0 && next_present_ns > now && next_present_ns < target)
+            target = next_present_ns;
+        if (target > now) SDL_DelayPrecise(SDL_min(target - now, SDL_NS_PER_MS));
     }
 }
 
@@ -695,6 +799,10 @@ static void process_events(void)
             break;
         case SDL_EVENT_KEY_UP:
             key_event(ev.key.scancode, false);
+            break;
+        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:      /* another display, or its refresh rate changed */
+        case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+            display_rate_checked = false;
             break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             if (focus_lost_handler) focus_lost_handler();

@@ -26,6 +26,8 @@ uint64_t host_tick_time_ns(void);
 #define HOST_FRAME_MAX_W (320 * 8)
 #define HOST_FRAME_MAX_H (200 * 8)
 void host_set_frame_source(bool (*compose)(u32 *xrgb), int w, int h);
+void host_set_fps(int fps);
+void host_set_vsync(bool vsync);
 
 /* Runs due timer ticks (and their audio), handles window events and presents the screen when it
  * changed. Every busy-wait loop of the original (tick waits, key polls, delays) must call this.
@@ -124,7 +126,9 @@ _Noreturn void host_fatal(const char *fmt, ...);
  *                           l / r      left / right click where the pointer is
  *                           lp lr rp rr  hold / let go of the left / right button
  *                         A move feeds mouse motion until the pointer (host_set_pointer_query) is
- *                         there, 3 s at most; the next entry waits until the action is done. */
+ *                         there, 3 s at most; the next entry waits until the action is done.
+ *   SR_FPS=n              the frame rate cap when --fps is not given (0 = uncapped)
+ *   SR_DEBUG_FPS=1        once a second: the frame rate and the texture upload / present times on stderr */
 
 /* Developer aid: where the game's own pointer is (screen pixels), for scripted SR_KEYS mouse moves.
  * Installed by the platform (its pointer is DS:472A/472C); returns false if unknown. */
