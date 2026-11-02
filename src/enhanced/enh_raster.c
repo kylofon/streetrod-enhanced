@@ -12,7 +12,7 @@
 #include "host.h"
 #include "platform/ega.h"
 
-#define MAX_CMDS 16384
+#define MAX_CMDS 65536
 #define MAX_WORKERS 32
 
 #define COL_ROAD    1
@@ -192,12 +192,11 @@ void enh_fill_rows(double y0, double y1, u8 c)
     cmd->fill_rows.color = c;
 }
 
-/* [x0, x1) x [y0, y1), either way round */
+/* [x0, x1) x [y0, y1); nothing when x1 <= x0 or y1 <= y0 (a far town wall less than a pixel tall comes out
+ * upside down) */
 void enh_fill_rect(double x0, double y0, double x1, double y1, u8 c)
 {
-    if (x1 < x0) { double t = x0; x0 = x1; x1 = t; }
-    if (y1 < y0) { double t = y0; y0 = y1; y1 = t; }
-    if (x1 == x0 || y1 == y0 || cmd_count >= MAX_CMDS) return;
+    if (x1 <= x0 || y1 <= y0 || cmd_count >= MAX_CMDS) return;
     EnhBuf *b = &enh_buf;
     int i0 = (int)ceil(x0 * b->sa - 0.5);
     int i1 = (int)ceil(x1 * b->sa - 0.5);

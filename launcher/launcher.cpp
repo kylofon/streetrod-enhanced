@@ -48,6 +48,9 @@ const int PAGE_MAIN = 0, PAGE_SOUNDS = 1;
 const int MIN_SCALE = 1, MAX_SCALE = 6, DEFAULT_SCALE = 3;
 const int MIN_RES = 2, MAX_RES = 8, DEFAULT_RES = 4;     // --res-scale
 const int MAX_AA = 4, DEFAULT_AA = 2;                    // --aa (1 = off)
+const int DRAW_DISTANCES[] = { 15, 60, 120 };            // --draw-distance (the game allows 15..120)
+const int NUM_DRAW_DISTANCES = sizeof(DRAW_DISTANCES) / sizeof(DRAW_DISTANCES[0]);
+const int DEFAULT_DRAW_DISTANCE = 60;
 
 #ifdef __WXMSW__
 HRESULT CALLBACK AboutCallback(HWND hwnd, UINT msg, WPARAM, LPARAM lp, LONG_PTR) {
@@ -155,6 +158,11 @@ LauncherFrame::LauncherFrame()
     resolution_->SetSelection(
         wxMax(MIN_RES, wxMin(MAX_RES, settings::GetInt(SECTION, "ResScale", DEFAULT_RES))) - MIN_RES);
     aa_->SetSelection(wxMax(1, wxMin(MAX_AA, settings::GetInt(SECTION, "AA", DEFAULT_AA))) - 1);
+    int savedDist = settings::GetInt(SECTION, "DrawDistance", DEFAULT_DRAW_DISTANCE);
+    int distSel = 0;                                  // the largest not above the saved one (240 -> 120)
+    for (int i = 0; i < NUM_DRAW_DISTANCES; ++i)
+        if (DRAW_DISTANCES[i] <= savedDist) distSel = i;
+    drawDistance_->SetSelection(distSel);
     town_->SetValue(settings::GetInt(SECTION, "Town", 1) != 0);
     ShowSounds(sounds_);
     loading_ = false;
@@ -303,6 +311,13 @@ wxWindow* LauncherFrame::CreateMainPage(wxWindow* parent) {
     for (int a = 2; a <= MAX_AA; ++a) aa_->Append(wxString::Format(L"%d × %d", a, a));
     aa_->SetToolTip("Smooth edges: samples per pixel. Higher costs more time per frame.");
     pgrid->Add(aa_, 0, wxALIGN_CENTER_VERTICAL);
+    pgrid->Add(new wxStaticText(pb, wxID_ANY, "Draw d&istance:"), 0, wxALIGN_CENTER_VERTICAL);
+    drawDistance_ = new wxChoice(pb, wxID_ANY);
+    drawDistance_->Append("original DOS Street Rod");
+    drawDistance_->Append("4x distance (default)");
+    drawDistance_->Append("8x distance (maximum)");
+    drawDistance_->SetToolTip("How far down the road is drawn in races. Higher values let you see turns and opponents earlier.");
+    pgrid->Add(drawDistance_, 0, wxALIGN_CENTER_VERTICAL);
     pictureBox->Add(pgrid, 0, wxLEFT | wxRIGHT | wxTOP, gap);
     town_ = new wxCheckBox(pb, wxID_ANY, "Drives through &town enhanced too");
     pictureBox->Add(town_, 0, wxALL, gap);
@@ -483,6 +498,7 @@ void LauncherFrame::UpdateState() {
     const bool enhanced = graphics_->GetSelection() == 0;
     resolution_->Enable(enhanced);
     aa_->Enable(enhanced);
+    drawDistance_->Enable(enhanced);
     town_->Enable(enhanced);
     book_->GetPage(PAGE_MAIN)->Layout();
     if (book_->GetSelection() == PAGE_MAIN) FitPage();  // the notes change the page's size
@@ -520,6 +536,7 @@ void LauncherFrame::Play() {
     options.classic = graphics_->GetSelection() == 1;
     options.resScale = resolution_->GetSelection() + MIN_RES;
     options.aa = aa_->GetSelection() + 1;
+    options.drawDistance = DRAW_DISTANCES[drawDistance_->GetSelection()];
     options.town = town_->GetValue();
     options.sounds = sounds_;
     wxString error;
@@ -543,6 +560,7 @@ void LauncherFrame::Save() {
     settings::SetInt(SECTION, "Classic", graphics_->GetSelection() == 1 ? 1 : 0);
     settings::SetInt(SECTION, "ResScale", resolution_->GetSelection() + MIN_RES);
     settings::SetInt(SECTION, "AA", aa_->GetSelection() + 1);
+    settings::SetInt(SECTION, "DrawDistance", DRAW_DISTANCES[drawDistance_->GetSelection()]);
     settings::SetInt(SECTION, "Town", town_->GetValue() ? 1 : 0);
     settings::SaveWindowPosition(SECTION, this);
 }

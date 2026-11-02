@@ -11,11 +11,15 @@ comes along with it: at 8 frames a second, a high-resolution picture only makes 
 
 ## Status (0.2.0)
 
-Stage 1 is done; stage 2 (the longer draw distance) is not started.
+Stage 1 is done; stage 2 (the longer draw distance) is done without the haze.
 
 * Done: the scaled output frame and the coverage (§2), smooth motion, the road, sky and horizon, the road-side
   objects, signs, banners, town walls, the opponent and the police car, the rear-view mirror and the left side
   mirror, the town cruise, the options and the launcher's Picture box.
+* **Longer draw distance (stage 2)**: `--draw-distance` 15..120 segments (default 60; the original draws 15).
+  Far road-side shapes step down through the original's smaller sizes (mip levels) and keep at least one
+  sample per line, so they do not flicker; slices beyond a crest are culled and the ground in front hides what
+  lies behind it.
 * **Worker threads.** The drawing calls record a command list; the commands then run, and the resolve
   follows, in horizontal bands, one worker per logical core (`enh_raster.c`). The picture is the same as on one
   thread. At 1280 × 800, 2 × 2 a frame takes about 1 ms on 12 logical cores (8.5 ms before, on one core).
@@ -31,16 +35,18 @@ Stage 1 is done; stage 2 (the longer draw distance) is not started.
     camera's lateral position and heading between frames.
   * **Sky scroll.** The sky and the horizon panorama scroll an eighth of the original's rate (`SKY_SCROLL`):
     tied to the heading as in the original, they raced across the screen when steering.
-  * **Largest sizes only.** Road-side shapes always use the most detailed of the original's sizes, scaled by
-    depth; signs use the largest pre-scaled picture; the cars their native pictures, scaled to fit the
-    original's shrunk views (at most 1.3 times the native size).
+  * **Largest sizes.** Road-side shapes use the most detailed of the original's sizes, scaled by depth, and step
+    down to the smaller ones only where its lines would be thinner than a sample; signs use the largest
+    pre-scaled picture; the cars their native pictures, scaled to fit the original's shrunk views (at most 1.3
+    times the native size).
   * **Mirror objects** stand at their true segment (the original draws them one segment off).
   * **Left side mirror.** While it draws the road, the original copies the rear-view mirror's (248, 22) 32 × 19
     to the side mirror at (8, 103), below the split. `enh_side_mirror` (`enh_mirror.c`) copies the enhanced
     rear-view mirror there at the output resolution, after the resolve, while the enhanced view is shown.
     While a dialog covers the rear-view mirror, the side mirror keeps the last copy; a dialog over the side
     mirror itself is left alone. After the road view the original's own copy shows again.
-* Not done yet: mip levels for far sprites, the developer aids of §5 beyond `SR_ENH_TRACE`.
+* Not done yet: the haze and the fade-in at the far edge (§4.3, §4.5), the developer aids of §5 beyond
+  `SR_ENH_TRACE`.
 
 References:
 
@@ -203,7 +209,8 @@ The road ahead exists in the table, so the geometry comes almost for free. The w
 8. **Mirror distance:** 8 segments in the original, raised to `min(N/2, 30)`. Objects behind the car come from
    the table, which is read-only history, so no ring buffer is needed (unlike TD2E).
 9. **Cost.** Measure the render time at 1280×800 2×2 with N = 60 and 120. The target is under 4 ms a frame on
-   the worker pool (TD3E: 4.2 ms with its far ring).
+   the worker pool (TD3E: 4.2 ms with its far ring). Measured, headless, in a race on 12 logical cores: 1.2 ms
+   at N = 60 and 1.3 ms at N = 120 (1.0 ms at 15); on one thread 4.2 ms at both.
 
 **Stage 2 acceptance:**
 

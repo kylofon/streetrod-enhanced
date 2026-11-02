@@ -7,6 +7,7 @@ not included; the game is free from the copyright owner: https://www.streetrodon
 
 * Smooth road view in races and drives through town, at your display's refresh rate.
 * High resolution (up to 2560 × 1600) with anti-aliasing.
+* Extended road draw distance in races (up to 120 segments, 8× the original's).
 * Target frame rate control (`--fps`) and vertical synchronisation (`--vsync`).
 * Separate music and sound effects volumes.
 * The game is otherwise the original: garage, opponents, physics, police and screens.
@@ -65,6 +66,7 @@ cmake --build build
 | `--fullscreen` | Start in full screen |
 | `--res-scale N` | Resolution, × 320×200 (default 4, 2–8) |
 | `--aa N` | Anti-aliasing, N×N samples (default 2, 1 = off) |
+| `--draw-distance N` | Road draw distance in races, segments (default 60, 15–120; the original's is 15) |
 | `--fps N\|auto` | Frame rate cap, 0–1000 (default auto: the display's refresh; 0 = uncapped; with VSync only a cap below the refresh counts) |
 | `--vsync on\|off` | Wait for vertical sync (default on) |
 | `--motion-delay P` | Smooth view delay, % of a game frame (default 100) |

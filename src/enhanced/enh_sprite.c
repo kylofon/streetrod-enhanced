@@ -11,7 +11,7 @@
 #include "platform/ega.h"
 #include "platform/video.h"
 
-#define CACHE 48
+#define CACHE 512
 
 static struct { u32 key; EnhImage img; } cache[CACHE];
 static int ncache;

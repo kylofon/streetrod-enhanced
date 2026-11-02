@@ -15,10 +15,13 @@
 #define ENH_MAX_SAMPLES       16       /* res scale x aa at most (samples per original pixel, each axis) */
 #define ENH_DEFAULT_MOTION_DELAY 100   /* percent of a game frame the smooth view runs behind the game: 100 = it
                                           only interpolates between frames it has */
+#define ENH_DEFAULT_DRAW_DISTANCE 60   /* road segments ahead (original is 14/15) */
+#define ENH_MIN_DRAW_DISTANCE     15
+#define ENH_MAX_DRAW_DISTANCE     120
 
 /* main.c: enabled = false is --classic (the original's picture, scaled by res_scale). res_scale 1..8,
- * aa 1..4, motion_delay 0..100, town = the town cruise is enhanced too. */
-void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town);
+ * aa 1..4, motion_delay 0..100, town = the town cruise is enhanced too, draw_distance 15..120. */
+void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town, int draw_distance);
 bool enh_enabled(void);
 int  enh_res_scale(void);
 

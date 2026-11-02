@@ -67,6 +67,7 @@ private:
     wxChoice* graphics_ = nullptr;   // enhanced / original
     wxChoice* resolution_ = nullptr;
     wxChoice* aa_ = nullptr;
+    wxChoice* drawDistance_ = nullptr;
     wxCheckBox* town_ = nullptr;
     wxButton* play_ = nullptr;
     // The Sounds page: a slider and a number field for each volume.

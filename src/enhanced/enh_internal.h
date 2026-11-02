@@ -12,6 +12,7 @@ typedef struct {
     bool enabled;
     int res_scale, aa, motion_delay;
     bool town;
+    int draw_distance;
 } EnhOptions;
 extern EnhOptions enh_opt;
 
