@@ -36,8 +36,8 @@ not included; the game is free from the copyright owner: https://www.streetrodon
 ## Requirements
 
 * Game files: `SR.EXE` (or `SRSE.EXE`), `LIB1`, `LIB2`, `HOT_DATA`.
-* One CPU core draws the road view (about 8.5 ms a frame at the default); lower the resolution or anti-aliasing
-  on slow machines.
+* The road view is drawn on all CPU cores (at the default, about 1.2 ms a frame on 6 cores / 12 threads, 4.2 ms
+  on one); lower the resolution, anti-aliasing or draw distance on slow machines.
 * To build: CMake 3.24+, C11, SDL 3; the launcher needs C++17 and wxWidgets 3.2.
 
 ## Build
