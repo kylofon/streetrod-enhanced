@@ -51,6 +51,10 @@ void enh_resolve(u32 *xrgb, const u32 *pal, int npal, u16 page, int y_end);
 /* enh_road.c */
 void enh_draw_road(const EnhView *v);
 
+/* enh_mirror.c: the left side mirror below the split, over xrgb after the resolve; reset = a new road view. */
+void enh_side_mirror_reset(void);
+void enh_side_mirror(u32 *xrgb, int res_scale);
+
 /* enh_sprite.c: palette-index images, ENH_CLEAR = transparent. */
 #define ENH_CLEAR 0xFF
 typedef struct { int w, h; u8 *px; } EnhImage;
