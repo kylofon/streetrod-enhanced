@@ -22,11 +22,19 @@ void enh_images_reset(void)
     ncache = 0;
 }
 
+/* The frame's drawing commands keep pointers to the images until they have run, so the cache is only emptied
+ * between frames (enh_raster_begin), once it is more than half full. */
+void enh_images_frame_begin(void)
+{
+    if (ncache > CACHE / 2) enh_images_reset();
+}
+
+/* NULL when the cache is full: the image is left out of this frame */
 static EnhImage *cache_slot(u32 key, int w, int h, bool *fresh)
 {
     for (int i = 0; i < ncache; i++)
         if (cache[i].key == key && cache[i].img.w == w && cache[i].img.h == h) { *fresh = false; return &cache[i].img; }
-    if (ncache == CACHE) enh_images_reset();
+    if (ncache == CACHE) return NULL;
     EnhImage *img = &cache[ncache].img;
     cache[ncache++].key = key;
     img->w = w;
@@ -46,7 +54,7 @@ const EnhImage *enh_image_bitmap(u16 seg, u16 off)
     if (w <= 0 || h <= 0 || w > 640 || h > 400) return NULL;
     bool fresh;
     EnhImage *img = cache_slot((u32)seg << 16 | off, w, h, &fresh);
-    if (!fresh) return img;
+    if (!img || !fresh) return img;
     FarPtr pl = desc_planes(d), mk = desc_mask(d);
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
@@ -66,7 +74,7 @@ const EnhImage *enh_image_vram(u16 page, int x, int y, int w, int h)
     if (w <= 0 || h <= 0) return NULL;
     bool fresh;
     EnhImage *img = cache_slot(0xFFFF0000u ^ (u32)(page + y * 320 + x), w, h, &fresh);
-    if (!fresh) return img;
+    if (!img || !fresh) return img;
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++) {
             u16 o = (u16)(page + (y + j) * EGA_BYTES_PER_LINE + ((x + i) >> 3));
@@ -77,34 +85,3 @@ const EnhImage *enh_image_vram(u16 page, int x, int y, int w, int h)
     return img;
 }
 
-/* The image stretched over [x0, x1) x [y0, y1) (original screen coordinates), nearest texel per sample;
- * mirrored when x1 < x0. */
-void enh_draw_image(const EnhImage *img, double x0, double y0, double x1, double y1)
-{
-    if (!img || y1 <= y0 || x1 == x0) return;
-    EnhBuf *b = &enh_buf;
-    bool flip = x1 < x0;
-    double l = flip ? x1 : x0, r = flip ? x0 : x1;
-    double sl = l * b->sa, sr = r * b->sa, st = (y0 - ENH_VIEW_Y0) * b->sa, sb = (y1 - ENH_VIEW_Y0) * b->sa;
-    int i0 = SDL_max(b->cx0, (int)ceil(sl - 0.5)), i1 = SDL_min(b->cx1, (int)ceil(sr - 0.5));
-    int j0 = SDL_max(b->cy0, (int)ceil(st - 0.5)), j1 = SDL_min(b->cy1, (int)ceil(sb - 0.5));
-    double du = img->w / (sr - sl), dv = img->h / (sb - st);
-    for (int j = j0; j < j1; j++) {
-        int v = (int)((j + 0.5 - st) * dv);
-        if (v < 0 || v >= img->h) continue;
-        const u8 *src = img->px + (size_t)v * img->w;
-        u8 *out = b->px + (size_t)j * b->w;
-        for (int i = i0; i < i1; i++) {
-            int u = (int)((i + 0.5 - sl) * du);
-            if (u < 0 || u >= img->w) continue;
-            u8 c = src[flip ? img->w - 1 - u : u];
-            if (c != ENH_CLEAR) out[i] = c;
-        }
-    }
-}
-
-void enh_fill_rect(double x0, double y0, double x1, double y1, u8 c)
-{
-    double xs[4] = { x0, x1, x1, x0 }, ys[4] = { y0, y0, y1, y1 };
-    enh_fill_poly(xs, ys, 4, c);
-}

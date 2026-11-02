@@ -115,36 +115,6 @@ static void edges_at(double s, double *xl, double *xr)
 
 /* ---------------------------------------------------------------- sky and horizon */
 
-static u8 src_rows[0xB8][320];     /* page 1 rows 66h..B7h: the sky and horizon sheets */
-
-static void read_sheets(void)
-{
-    for (int y = 0x66; y < 0xB8; y++) {
-        u16 o = (u16)(0x2000 + y * EGA_BYTES_PER_LINE);
-        for (int x = 0; x < 320; x++) {
-            u16 b = (u16)(o + (x >> 3));
-            int bit = 7 - (x & 7), c = 0;
-            for (int k = 0; k < 4; k++) c |= (ega_plane(k)[b] >> bit & 1) << k;
-            src_rows[y][x] = (u8)c;
-        }
-    }
-}
-
-/* one sample row from sheet row sy, scrolled so that screen x shows sheet column x - shift */
-static void sheet_row(int j, int sy, double shift)
-{
-    EnhBuf *b = &enh_buf;
-    if (sy < 0x66) sy = 0x66;
-    if (sy > 0xB7) sy = 0xB7;
-    u8 *out = b->px + (size_t)j * b->w;
-    for (int i = 0; i < b->w; i++) {
-        double x = (i + 0.5) / b->sa - shift;
-        int col = (int)floor(x) % 320;
-        if (col < 0) col += 320;
-        out[i] = src_rows[sy][col];
-    }
-}
-
 /* road_proj_y(F0h, 7D0h, h) in the original's 16-bit arithmetic */
 static double horizon_y(s16 h)
 {
@@ -155,27 +125,15 @@ static double horizon_y(s16 h)
 
 static void draw_sky(const Cam *c, bool town, double *ground_y)
 {
-    EnhBuf *b = &enh_buf;
-    read_sheets();
     if (town) {                    /* fixed: sky 1Dh rows from 66h, skyline 10h rows from A3h at 2Fh */
-        for (int j = 0; j < b->h; j++) {
-            double y = ENH_VIEW_Y0 + (j + 0.5) / b->sa;
-            if (y < 0x2F) sheet_row(j, 0x66 + (int)floor(y - 0x12), 0);
-            else if (y < 0x3F) sheet_row(j, 0xA3 + (int)floor(y - 0x2F), 0);
-            else { enh_fill_rows(y - 0.5 / b->sa, ENH_VIEW_Y1, COL_ROAD); break; }
-        }
+        enh_draw_sky(true, 0, 0);
         *ground_y = 0x3F;
         return;
     }
     s16 h0 = (s16)trk(TRK_HGT, c->base);
     double hy = horizon_y(h0) + 4.0 * c->hpos;
-    double heading = (s16)trk(TRK_YAW, c->base) + c->hv;
-    for (int j = 0; j < b->h; j++) {
-        double y = ENH_VIEW_Y0 + (j + 0.5) / b->sa;
-        if (y < hy - 12) sheet_row(j, (int)floor(y + 0xA6 - hy), 2.0 * SKY_SCROLL * heading);
-        else if (y < hy + 8) sheet_row(j, 0xA3 + (int)floor(y - (hy - 12)), 4.0 * SKY_SCROLL * heading);
-        else { enh_fill_rows(y - 0.5 / b->sa, ENH_VIEW_Y1, COL_GRASS); break; }
-    }
+    double heading = ((s16)trk(TRK_YAW, c->base) + c->hv) * SKY_SCROLL;
+    enh_draw_sky(false, hy, heading);
     *ground_y = hy + 8;
 }
 
@@ -621,8 +579,7 @@ static void draw_mirror(const Cam *c, const EnhView *v)
 
 void enh_draw_road(const EnhView *v)
 {
-    enh_buf_setup();
-    enh_clip_view();
+    enh_raster_begin();
     Cam c;
     c.base = segc((int)floor(v->pos));
     c.pos = v->pos;

@@ -80,8 +80,12 @@ bool host_init(const char *dir, int window_scale, bool fullscreen)
     return true;
 }
 
+static void (*shutdown_handler)(void);
+void host_set_shutdown_handler(void (*handler)(void)) { shutdown_handler = handler; }
+
 void host_shutdown(void)
 {
+    if (shutdown_handler) shutdown_handler();         /* before SDL_Quit: e.g. the worker threads */
     if (gamepad) SDL_CloseGamepad(gamepad);
     audio_dump_close();
     if (audio) SDL_DestroyAudioStream(audio);
