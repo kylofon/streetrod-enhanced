@@ -63,6 +63,7 @@ private:
     wxCheckBox* noMouse_ = nullptr;
     wxChoice* scale_ = nullptr;
     wxCheckBox* fullscreen_ = nullptr;
+    wxChoice* frameRate_ = nullptr;  // the display's refresh rate / uncapped
     wxChoice* graphics_ = nullptr;   // enhanced / original
     wxChoice* resolution_ = nullptr;
     wxChoice* aa_ = nullptr;
