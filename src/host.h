@@ -28,6 +28,8 @@ uint64_t host_tick_time_ns(void);
 void host_set_frame_source(bool (*compose)(u32 *xrgb), int w, int h);
 void host_set_fps(int fps);
 void host_set_vsync(bool vsync);
+/* Called first by host_shutdown, before SDL is shut down (threads that use SDL end there). */
+void host_set_shutdown_handler(void (*handler)(void));
 
 /* Runs due timer ticks (and their audio), handles window events and presents the screen when it
  * changed. Every busy-wait loop of the original (tick waits, key polls, delays) must call this.

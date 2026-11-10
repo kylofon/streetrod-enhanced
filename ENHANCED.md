@@ -16,6 +16,9 @@ Stage 1 is done; stage 2 (the longer draw distance) is not started.
 * Done: the scaled output frame and the coverage (§2), smooth motion, the road, sky and horizon, the road-side
   objects, signs, banners, town walls, the opponent and the police car, the rear-view mirror and the left side
   mirror, the town cruise, the options and the launcher's Picture box.
+* **Worker threads.** The drawing calls record a command list; the commands then run, and the resolve
+  follows, in horizontal bands, one worker per logical core (`enh_raster.c`). The picture is the same as on one
+  thread. At 1280 × 800, 2 × 2 a frame takes about 1 ms on 12 logical cores (8.5 ms before, on one core).
 * Still the original's picture, laid over the enhanced view: the cockpit (A-pillar, hood), the drag race's start
   light, the messages, and the dashboard below the split (apart from its side mirror).
 * Changes from the plan below, made while testing:
@@ -37,8 +40,7 @@ Stage 1 is done; stage 2 (the longer draw distance) is not started.
     rear-view mirror there at the output resolution, after the resolve, while the enhanced view is shown.
     While a dialog covers the rear-view mirror, the side mirror keeps the last copy; a dialog over the side
     mirror itself is left alone. After the road view the original's own copy shows again.
-* Not done yet: rendering on worker threads (about 8.5 ms a frame at 1280 × 800, 2 × 2, on one core), mip
-  levels for far sprites, the developer aids of §5 beyond `SR_ENH_TRACE`.
+* Not done yet: mip levels for far sprites, the developer aids of §5 beyond `SR_ENH_TRACE`.
 
 References:
 
