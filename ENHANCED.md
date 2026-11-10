@@ -14,10 +14,10 @@ comes along with it: at 8 frames a second, a high-resolution picture only makes 
 Stage 1 is done; stage 2 (the longer draw distance) is not started.
 
 * Done: the scaled output frame and the coverage (§2), smooth motion, the road, sky and horizon, the road-side
-  objects, signs, banners, town walls, the opponent and the police car, the rear-view mirror, the town cruise,
-  the options and the launcher's Picture box.
+  objects, signs, banners, town walls, the opponent and the police car, the rear-view mirror and the left side
+  mirror, the town cruise, the options and the launcher's Picture box.
 * Still the original's picture, laid over the enhanced view: the cockpit (A-pillar, hood), the drag race's start
-  light, the messages, and the dashboard below the split with its side mirror.
+  light, the messages, and the dashboard below the split (apart from its side mirror).
 * Changes from the plan below, made while testing:
   * **Coverage by layer.** `road_draw_frame` marks what it draws: `enh_draw_begin` / `enh_draw_fg` switch the EGA
     model between a background layer (replaced by the enhanced view) and a foreground layer (kept). The
@@ -32,6 +32,11 @@ Stage 1 is done; stage 2 (the longer draw distance) is not started.
     depth; signs use the largest pre-scaled picture; the cars their native pictures, scaled to fit the
     original's shrunk views (at most 1.3 times the native size).
   * **Mirror objects** stand at their true segment (the original draws them one segment off).
+  * **Left side mirror.** While it draws the road, the original copies the rear-view mirror's (248, 22) 32 × 19
+    to the side mirror at (8, 103), below the split. `enh_side_mirror` (`enh_mirror.c`) copies the enhanced
+    rear-view mirror there at the output resolution, after the resolve, while the enhanced view is shown.
+    While a dialog covers the rear-view mirror, the side mirror keeps the last copy; a dialog over the side
+    mirror itself is left alone. After the road view the original's own copy shows again.
 * Not done yet: rendering on worker threads (about 8.5 ms a frame at 1280 × 800, 2 × 2, on one core), mip
   levels for far sprites, the developer aids of §5 beyond `SR_ENH_TRACE`.
 
@@ -75,6 +80,7 @@ References:
 | `enh_road.c` | road geometry: the segment table turned into a continuous road strip |
 | `enh_raster.c` | sample buffers, polygon fill, resolve, worker bands |
 | `enh_sprite.c` | LIB2 picture decode, scaled sprite drawing, mips |
+| `enh_mirror.c` | the left side mirror |
 | `enh_internal.h` | shared declarations |
 
 **Hooks** (marked `ENH:` in the engine, calls through `modules.h`)

@@ -79,6 +79,7 @@ void enh_race_begin(void)
     frames.n = phys.n = 0;
     presented = false;
     enh_images_reset();
+    enh_side_mirror_reset();
     active = enh_opt.enabled && (DSB(DS_racing) != 0 || enh_opt.town);
 }
 
@@ -174,6 +175,7 @@ bool enh_compose(u32 *xrgb, const u32 rgb[16])
     enh_draw_road(&v);
     int y_end = SDL_min(ENH_VIEW_Y1, ega_line_compare());
     enh_resolve(xrgb, rgb, 16, shown_start, y_end);
+    enh_side_mirror(xrgb, enh_opt.res_scale);
     if (trace) {
         static double last_pos;
         fprintf(trace, "%llu pos %.4f d %.4f lat %.1f rh %.2f opp %.3f ms %.2f\n",
