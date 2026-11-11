@@ -11,7 +11,8 @@
 #include "host.h"
 #include "platform/ega.h"
 
-EnhOptions enh_opt = { false, 1, ENH_DEFAULT_AA, ENH_DEFAULT_MOTION_DELAY, true };
+EnhOptions enh_opt = { false, 1, ENH_DEFAULT_AA, ENH_DEFAULT_MOTION_DELAY, true, ENH_DEFAULT_DRAW_DISTANCE,
+                       ENH_REDUCED_SKY_SCROLL };
 
 /* A smoothly interpolated series of samples: [0] = the newest, [1] and [2] the ones before. */
 #define SER_N 5
@@ -59,7 +60,7 @@ static void ser_at(const Series *s, Uint64 now, double nominal_ns, double *out)
 
 #define TICK_NS ((double)PIT_DIV_GAME * 1e9 / PIT_HZ)
 
-void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town)
+void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town, int draw_distance)
 {
     enh_opt.enabled = enabled;
     enh_opt.res_scale = SDL_clamp(res_scale, 1, ENH_MAX_RES_SCALE);
@@ -67,12 +68,14 @@ void enh_init(bool enabled, int res_scale, int aa, int motion_delay, bool town)
     while (enh_opt.res_scale * enh_opt.aa > ENH_MAX_SAMPLES) enh_opt.aa--;
     enh_opt.motion_delay = SDL_clamp(motion_delay, 0, 100);
     enh_opt.town = town;
+    enh_opt.draw_distance = SDL_clamp(draw_distance, ENH_MIN_DRAW_DISTANCE, ENH_MAX_DRAW_DISTANCE);
     if (enabled) enh_raster_init();
     const char *t = SDL_getenv("SR_ENH_TRACE");
     if (enabled && t && *t && (trace = fopen(t, "w")) != NULL) setvbuf(trace, NULL, _IOLBF, 4096);
 }
 
 bool enh_enabled(void) { return enh_opt.enabled; }
+void enh_set_sky_scroll(int percent) { enh_opt.sky_scroll = SDL_clamp(percent, 0, 100); }
 int  enh_res_scale(void) { return enh_opt.res_scale; }
 
 void enh_race_begin(void)

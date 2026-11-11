@@ -7,6 +7,7 @@ not included; the game is free from the copyright owner: https://www.streetrodon
 
 * Smooth road view in races and drives through town, at your display's refresh rate.
 * High resolution (up to 2560 × 1600) with anti-aliasing.
+* Extended road draw distance in races (up to 120 segments, 8× the original's).
 * Target frame rate control (`--fps`) and vertical synchronisation (`--vsync`).
 * Separate music and sound effects volumes.
 * The game is otherwise the original: garage, opponents, physics, police and screens.
@@ -35,8 +36,8 @@ not included; the game is free from the copyright owner: https://www.streetrodon
 ## Requirements
 
 * Game files: `SR.EXE` (or `SRSE.EXE`), `LIB1`, `LIB2`, `HOT_DATA`.
-* One CPU core draws the road view (about 8.5 ms a frame at the default); lower the resolution or anti-aliasing
-  on slow machines.
+* The road view is drawn on all CPU cores (at the default, about 1.2 ms a frame on 6 cores / 12 threads, 4.2 ms
+  on one); lower the resolution, anti-aliasing or draw distance on slow machines.
 * To build: CMake 3.24+, C11, SDL 3; the launcher needs C++17 and wxWidgets 3.2.
 
 ## Build
@@ -65,10 +66,12 @@ cmake --build build
 | `--fullscreen` | Start in full screen |
 | `--res-scale N` | Resolution, × 320×200 (default 4, 2–8) |
 | `--aa N` | Anti-aliasing, N×N samples (default 2, 1 = off) |
+| `--draw-distance N` | Road draw distance in races, segments (default 60, 15–120; the original's is 15) |
 | `--fps N\|auto` | Frame rate cap, 0–1000 (default auto: the display's refresh; 0 = uncapped; with VSync only a cap below the refresh counts) |
 | `--vsync on\|off` | Wait for vertical sync (default on) |
 | `--motion-delay P` | Smooth view delay, % of a game frame (default 100) |
 | `--town on\|off` | Enhanced drives through town (default on) |
+| `--reduced-sky-rotation on\|off` | The horizon turns a quarter as much as in the original, and the sky with it (default on; off = as the original) |
 | `--music-volume P` | Music volume, % (default 100) |
 | `--sfx-volume P` | Sound effects volume, % (default 100) |
 | `--classic` | Original picture only |

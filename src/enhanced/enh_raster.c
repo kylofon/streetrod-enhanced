@@ -12,7 +12,7 @@
 #include "host.h"
 #include "platform/ega.h"
 
-#define MAX_CMDS 16384
+#define MAX_CMDS 65536
 #define MAX_WORKERS 32
 
 #define COL_ROAD    1
@@ -192,12 +192,11 @@ void enh_fill_rows(double y0, double y1, u8 c)
     cmd->fill_rows.color = c;
 }
 
-/* [x0, x1) x [y0, y1), either way round */
+/* [x0, x1) x [y0, y1); nothing when x1 <= x0 or y1 <= y0 (a far town wall less than a pixel tall comes out
+ * upside down) */
 void enh_fill_rect(double x0, double y0, double x1, double y1, u8 c)
 {
-    if (x1 < x0) { double t = x0; x0 = x1; x1 = t; }
-    if (y1 < y0) { double t = y0; y0 = y1; y1 = t; }
-    if (x1 == x0 || y1 == y0 || cmd_count >= MAX_CMDS) return;
+    if (x1 <= x0 || y1 <= y0 || cmd_count >= MAX_CMDS) return;
     EnhBuf *b = &enh_buf;
     int i0 = (int)ceil(x0 * b->sa - 0.5);
     int i1 = (int)ceil(x1 * b->sa - 0.5);
@@ -315,10 +314,13 @@ static inline void render_sky_band(const RenderCmd *cmd, int j_start, int j_end)
     } else {
         double hy = cmd->sky.hy;
         double heading = cmd->sky.heading;
+        /* the original moves the sky x2 and the horizon x4 the heading; turning, both are at infinity and move
+         * alike, so with the reduced rotation the sky goes with the horizon */
+        double sky_k = enh_opt.sky_scroll < 100 ? 4.0 : 2.0;
         for (int j = j_start; j < j_end; j++) {
             double y = ENH_VIEW_Y0 + (j + 0.5) / b->sa;
             if (y < hy - 12)
-                sky_sample_row(j, j_start, (int)floor(y + 0xA6 - hy), 2.0 * heading,                  /* x2 */
+                sky_sample_row(j, j_start, (int)floor(y + 0xA6 - hy), sky_k * heading,
                                &last_sy, &last_shift);
             else if (y < hy + 8)
                 sky_sample_row(j, j_start, 0xA3 + (int)floor(y - (hy - 12)), 4.0 * heading,          /* x4 */

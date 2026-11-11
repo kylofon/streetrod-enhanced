@@ -34,7 +34,6 @@
 #define Y_ROAD       0x7D0     /* world heights: the road, the eye (the top of a façade) */
 #define Y_EYE        0x76C
 #define OBJ_ROWS     10        /* road-side objects: the original's rows 1..10 */
-#define SKY_SCROLL   0.125     /* the sky and horizon scroll this fraction of the original's (heading x2, x4) */
 
 typedef struct {
     int base;                  /* segment the relative yaw / height are measured from */
@@ -43,7 +42,20 @@ typedef struct {
 } Cam;
 
 static int segc(int i) { return i < 0 ? 0 : i > SEG_LAST ? SEG_LAST : i; }
-static u16 trk(u16 arr, int i) { return TRKW(arr, segc(i)); }
+static u16 trk(u16 arr, int i)
+{
+    if (DSS(DS_racing) != 0 && DSS(DS_race_type) == 0) {
+        if (i > 0x17C) {
+            if (arr == TRK_YAW || arr == TRK_HGT) return TRKW(arr, 0x17C);
+            return 0;
+        }
+    }
+    if (i > SEG_LAST) {
+        if (arr == TRK_YAW || arr == TRK_HGT) return TRKW(arr, SEG_LAST);
+        return 0;
+    }
+    return TRKW(arr, segc(i));
+}
 
 static double yaw_rel(const Cam *c, int i) { return (s16)(trk(TRK_YAW, i) - trk(TRK_YAW, c->base)); }
 static double hgt_rel(const Cam *c, int i) { return (s16)(trk(TRK_HGT, i) - trk(TRK_HGT, c->base)); }
@@ -132,7 +144,7 @@ static void draw_sky(const Cam *c, bool town, double *ground_y)
     }
     s16 h0 = (s16)trk(TRK_HGT, c->base);
     double hy = horizon_y(h0) + 4.0 * c->hpos;
-    double heading = ((s16)trk(TRK_YAW, c->base) + c->hv) * SKY_SCROLL;
+    double heading = ((s16)trk(TRK_YAW, c->base) + c->hv) * enh_opt.sky_scroll / 100.0;   /* --reduced-sky-rotation */
     enh_draw_sky(false, hy, heading);
     *ground_y = hy + 8;
 }
@@ -145,16 +157,48 @@ static void quad(double xa0, double xa1, double ya, double xb0, double xb1, doub
     enh_fill_poly(xs, ys, 4, col);
 }
 
-/* the slice between sa (near) and sb (far) */
-static void draw_slice(const Cam *c, double sa, double sb, bool town)
+/* A slice of road between sa (near) and sb (far) with the screen rows of its near and far edges. A slice
+ * faces the eye when its far edge is higher on the screen than its near edge; one that does not lies beyond
+ * a crest and is hidden by the ground in front of it. */
+typedef struct { double sa, sb, ya, yb, occ; bool front, ground; } Slice;
+#define MAX_SLICES 1024
+
+/* The ground of the facing slices, laid down before any road: the rows of a slice belong to the ground
+ * across the whole width (the road has no side slope), the sky's own ground only begins below its horizon.
+ * occ[i] is the top row of everything nearer than slice i: what lies farther is clipped to the rows above
+ * it, so that a crest hides the road and the objects behind it without painting over a quad. */
+static void slices_ground(Slice *sl, int ns, double y_open, u8 col)
 {
+    double occ = y_open;
+    for (int i = ns - 1; i >= 0; i--) {                     /* near to far */
+        sl[i].occ = occ;
+        if (!sl[i].front) continue;
+        if (sl[i].ground) enh_fill_rows(sl[i].yb, fmin(sl[i].ya, occ), col);
+        if (sl[i].yb < occ) occ = sl[i].yb;
+    }
+}
+
+/* the rows above occ within box (x0, y0, x1, y1), set only when it changes */
+static void clip_occ(const double box[4], double occ, double *cur)
+{
+    occ = fmin(occ, box[3]);
+    if (occ == *cur) return;
+    *cur = occ;
+    enh_clip(box[0], box[1], box[2], occ);
+}
+
+/* what is drawn just before slice s lies behind it: the slice itself hides it too */
+static double occ_before(const Slice *s) { return s->front ? fmin(s->occ, s->yb) : s->occ; }
+
+/* the slice between sa (near) and sb (far): road, kerbs, dash and town façades, no ground */
+static void draw_slice(const Cam *c, const Slice *s, bool town)
+{
+    double sa = s->sa, sb = s->sb, ya = s->ya, yb = s->yb;
+    if (!s->front) return;
     Row ra = row_at(c, sa), rb = row_at(c, sb);
-    double ya = py(&ra, 0x7D0), yb = py(&rb, 0x7D0);
-    if (yb >= ya) return;                                   /* back-facing (beyond a crest) */
     int n = segc((int)ceil(sb - 1e-9));
     u16 C = trk(TRK_C, n), L = trk(TRK_L, n), R = trk(TRK_R, n);
     bool cross = C & 1;
-    enh_fill_rows(yb, ya, town ? COL_ROAD : COL_GRASS);    /* the ground of this slice */
 
     double la, ra_, lb, rb_;
     edges_at(sa, &la, &ra_);
@@ -222,21 +266,26 @@ static ObjRow obj_row(const Cam *c, int n, bool mirror)
 }
 
 /* The original draws the size made for its row (size 9 - row, the largest for rows 1..3); the enhanced
- * view always takes the largest (most detailed) size and scales it by depth. */
+ * view takes the largest (most detailed) size whose lines are still a sample tall, scaled by depth. Farther
+ * away it steps down through the original's smaller sizes (mip levels) instead of thinning the largest
+ * one's lines below a sample, where they would come and go from frame to frame. */
 static int size_for(double z, int nsizes, double *f)
 {
-    int k = nsizes - 1;
+    double min_f = 1.0 / enh_buf.sa;
+    int k = SDL_min(nsizes, 9) - 1;
+    while (k > 0 && 8.0 * (9 - k) / z < min_f) k--;
     *f = 8.0 * (9 - k) / z;
     return k;
 }
 
-/* shape_draw: an hline sprite of the shape table, type `type`, anchored at (x, y) */
+/* shape_draw: an hline sprite of the shape table, type `type`, anchored at (x, y); each line covers at
+ * least one sample each way, so a far shape stays a steady speck instead of flickering */
 static void shape(double x, double y, double z, int side, int type)
 {
     u16 set = DSW((u16)(DS_shape_table + 2 * type));
     int nsizes = DSS(set);
     if (nsizes <= 0 || z <= 0.5) return;
-    double f;
+    double f, m = 1.0 / enh_buf.sa;
     int k = size_for(z, nsizes, &f);
     u16 e = (u16)(DSW((u16)(set + 2)) + 6 * k);
     int n = DSS(e);
@@ -244,10 +293,10 @@ static void shape(double x, double y, double z, int side, int type)
     for (; n > 0; n--, ln.off = (u16)(ln.off + 4)) {
         int ldx = (s8)rd8(ln.seg, ln.off), ldy = (s8)rd8(ln.seg, (u16)(ln.off + 1));
         int lw = (s8)rd8(ln.seg, (u16)(ln.off + 2)), lc = rd8(ln.seg, (u16)(ln.off + 3));
-        double x0, x1;
+        double x0, x1, y0 = y + f * ldy;
         if (side == -1) { x0 = x - f * (ldx + lw); x1 = x - f * (ldx - 1); }
         else            { x0 = x + f * ldx;        x1 = x + f * (ldx + lw + 1); }
-        enh_fill_rect(x0, y + f * ldy, x1, y + f * (ldy + 1), (u8)lc);
+        enh_fill_rect(x0, y0, SDL_max(x1, x0 + m), SDL_max(y0 + f, y0 + m), (u8)lc);
     }
 }
 
@@ -261,6 +310,8 @@ static void sign_picture(double x, double y, double z, int align, int kind)
     const EnhImage *img = kind == 1 ? enh_image_vram(0x4000, sx, 0x66, w, h)
                                     : enh_image_vram(0x0000, sx, kind == 2 ? 0x64 : 0x8F, w, h);
     double f = 24.0 / z, W = w * f, H = h * f, x0, y0;
+    W = SDL_max(W, 1.0 / enh_buf.sa);                       /* at least a sample: no flicker far away */
+    H = SDL_max(H, 1.0 / enh_buf.sa);
     if (align == 1)      { x0 = x - W;     y0 = y - H; }
     else if (align == 0) { x0 = x - W / 2; y0 = y - H / 2; }
     else                 { x0 = x;         y0 = y - H; }
@@ -384,7 +435,9 @@ static void opponent(const Cam *c, const EnhView *v)
 {
     int s = v->opp_sprite;
     double d = (v->opp_pos - v->pos) * 8.0;
-    if (s < 0 || s > 8 || d >= 0x78 || d < -8) return;
+    if (d < -8 || d > enh_opt.draw_distance * 8.0) return;
+    if (d >= 0x78) s = 2;                                    /* far rear view */
+    if (s < 0 || s > 8) return;
     Row r = row_at(c, v->opp_pos);
     if (s == 0) r.z += 0x10;
     if (r.z < 1) return;
@@ -402,6 +455,7 @@ static void opponent(const Cam *c, const EnhView *v)
         double f = rear_scale_k() / r.z;
         if (f > 1.3) f = 1.3;
         double w = img->w * f, h = img->h * f, bottom = sy;
+        if (w < 0.5 || h < 0.5) return;
         if (s == 2 && bottom > 0x65) bottom = 0x65;
         enh_draw_image(img, sx - w / 2, bottom - h, sx + w / 2, bottom);
     }
@@ -438,13 +492,13 @@ static void draw_event(const Cam *c, const EnhView *v, const Event *e)
 #define MIR_Y1 0x2B
 #define MIR_ROWS 7             /* the original's rows 7..1 behind the car */
 
-/* road_draw_band_mirror + town_walls_mirror: the slice between sa (farther back) and sb */
-static void mirror_slice(const Cam *c, double sa, double sb, bool town)
+/* road_draw_band_mirror + town_walls_mirror: the slice between sa (farther back) and sb, no ground. The
+ * Slice keeps its near edge in sa / ya as in the front view. */
+static void mirror_slice(const Cam *c, const Slice *s, bool town)
 {
+    if (!s->front) return;
+    double sa = s->sb, sb = s->sa, ya = s->yb, yb = s->ya;
     Row ra = row_at_mirror(c, sa), rb = row_at_mirror(c, sb);
-    if (ra.z <= 0.5 || rb.z <= 0.5) return;
-    double ya = py(&ra, Y_ROAD), yb = py(&rb, Y_ROAD);
-    if (ya >= yb) return;                                   /* back-facing */
     int n = segc((int)ceil(sb - 1e-9));
     u16 C = trk(TRK_C, n), L = trk(TRK_L, n), R = trk(TRK_R, n);
     bool cross = C & 1;
@@ -467,7 +521,6 @@ static void mirror_slice(const Cam *c, double sa, double sb, bool town)
     edges_at(sb, &lb, &rb_);
     double xla = px(c, &ra, la), xra = px(c, &ra, ra_), xlb = px(c, &rb, lb), xrb = px(c, &rb, rb_);
     if (!cross) {
-        enh_fill_rows(ya, yb, COL_GRASS);                   /* grass drawn explicitly */
         quad(xlb, xrb, yb, xla, xra, ya, COL_ROAD);
     } else {
         if (C & 4) return;
@@ -529,7 +582,9 @@ static void draw_mirror(const Cam *c, const EnhView *v)
     FarPtr p = ds_far(DS_pic_mirror);                        /* mirror_draw_background */
     const EnhImage *bg = enh_image_bitmap(p.seg, p.off);
     if (bg) enh_draw_image(bg, 0xF0, 0x12, 0xF0 + bg->w, 0x12 + bg->h);
-    double s_far = v->pos - MIR_ROWS, s_near = v->pos - 1;
+    double mir_rows = SDL_min(enh_opt.draw_distance / 2.0, 30.0);
+    if (mir_rows < 7.0) mir_rows = 7.0;
+    double s_far = v->pos - mir_rows, s_near = v->pos - 1;
     Row rf = row_at_mirror(c, s_far);
     double y7 = py(&rf, Y_ROAD);
     p = ds_far(DS_pic_mirror_sky);
@@ -539,33 +594,56 @@ static void draw_mirror(const Cam *c, const EnhView *v)
         enh_draw_image(&strip, 0xF0, y7 - 2, 0xF0 + sky->w, y7);
     }
     enh_clip(MIR_X0, MIR_Y0, MIR_X1, MIR_Y1);
+    if (!v->town) enh_fill_rows(y7, MIR_Y1, COL_GRASS);    /* the ground below the mirror's horizon */
 
-    /* far to near (the mirror's far rows are the ones further behind); a row's objects and the opponent
-     * after the band in front of them */
-    Event ev[32];
-    int nev = 0;
-    for (int n = (int)ceil(s_far); n < s_near && nev < 30; n++) {
-        if (v->pos - n >= 1 && v->pos - n < 6 && !(trk(TRK_C, n) & 4))
-            ev[nev++] = (Event){ n + 1.0, EV_OBJECTS, n };
-    }
-    if (!v->town) ev[nev++] = (Event){ v->opp_pos + 1.0, EV_OPPONENT, 0 };
-    int e = 0;
-    for (int i = 1; i < nev; i++)                            /* ascending keys */
-        for (int k = i; k > 0 && ev[k].key < ev[k - 1].key; k--) { Event t_ = ev[k]; ev[k] = ev[k - 1]; ev[k - 1] = t_; }
+    /* slices of 1/8 segment, far to near (the mirror's far rows are the ones further behind) */
+    Slice sl[MAX_SLICES];
+    int ns = 0;
     double sa = s_far;
     double s = ceil(s_far * SLICES) / SLICES;
     if (s <= sa) s += 1.0 / SLICES;
-    while (sa < s_near) {
-        while (e < nev && ev[e].key <= sa) {
-            if (ev[e].kind == EV_OBJECTS) { ObjRow o = obj_row(c, ev[e].n, true); row_objects(&o); }
-            else mirror_opponent(c, v);
-            e++;
-        }
+    while (sa < s_near && ns < MAX_SLICES) {
         double sb = s < s_near ? s : s_near;
-        mirror_slice(c, sa, sb, v->town);
+        Slice *q = &sl[ns++];
+        Row rn = row_at_mirror(c, sb), rf_ = row_at_mirror(c, sa);
+        q->sa = sb;
+        q->sb = sa;
+        q->ya = py(&rn, Y_ROAD);
+        q->yb = py(&rf_, Y_ROAD);
+        q->front = rn.z > 0.5 && rf_.z > 0.5 && q->yb < q->ya - 1e-6;
+        q->ground = !(trk(TRK_C, segc((int)ceil(sb - 1e-9))) & 1);
         sa = sb;
         s += 1.0 / SLICES;
     }
+    slices_ground(sl, ns, MIR_Y1, COL_GRASS);
+
+    /* a row's objects and the opponent after the band behind them, clipped to the rows above the road in
+     * front of them */
+    Event ev[128];
+    int nev = 0;
+    for (int n = (int)ceil(s_far); n < s_near && nev < 120; n++) {
+        if (v->pos - n >= 1 && v->pos - n < mir_rows && !(trk(TRK_C, n) & 4))
+            ev[nev++] = (Event){ n + 1.0, EV_OBJECTS, n };
+    }
+    if (!v->town && (v->pos - v->opp_pos) < mir_rows) ev[nev++] = (Event){ v->opp_pos + 1.0, EV_OPPONENT, 0 };
+    int e = 0;
+    for (int i = 1; i < nev; i++)                            /* ascending keys */
+        for (int k = i; k > 0 && ev[k].key < ev[k - 1].key; k--) { Event t_ = ev[k]; ev[k] = ev[k - 1]; ev[k - 1] = t_; }
+    const double box[4] = { MIR_X0, MIR_Y0, MIR_X1, MIR_Y1 };
+    double clip_cur = MIR_Y1;
+    for (int i = 0; i < ns; i++) {
+        if (e < nev && ev[e].key <= sl[i].sb) {
+            clip_occ(box, occ_before(&sl[i]), &clip_cur);
+            for (; e < nev && ev[e].key <= sl[i].sb; e++) {
+                if (ev[e].kind == EV_OBJECTS) { ObjRow o = obj_row(c, ev[e].n, true); row_objects(&o); }
+                else mirror_opponent(c, v);
+            }
+        }
+        if (!sl[i].front) continue;
+        clip_occ(box, sl[i].occ, &clip_cur);
+        mirror_slice(c, &sl[i], v->town);
+    }
+    clip_occ(box, MIR_Y1, &clip_cur);
     for (; e < nev; e++) {
         if (ev[e].kind == EV_OBJECTS) { ObjRow o = obj_row(c, ev[e].n, true); row_objects(&o); }
         else mirror_opponent(c, v);
@@ -591,33 +669,66 @@ void enh_draw_road(const EnhView *v)
     draw_sky(&c, v->town, &ground_y);
     (void)ground_y;
 
-    /* slices far to near on a fixed grid of 1/8 segment, from the original's farthest row to just in
-     * front of the eye (z = 2) */
-    double s_far = v->pos + FAR_ROWS, s_near = v->pos - 0.25;
+    double s_far = v->pos + enh_opt.draw_distance, s_near = v->pos - 0.25;
 
-    /* What stands on the road, each drawn once the road up to one segment in front of it is drawn (the
-     * original draws a row's objects and the opponent after the band in front of the row). */
-    Event ev[64];
+    /* Clamp view distance at boundaries */
+    if (v->town && s_far > 179.0) s_far = 179.0;
+    if (!v->town && DSS(DS_race_type) == 0 && s_far > 0x17C + 30) s_far = 0x17C + 30;
+    if (s_far > SEG_LAST + 30) s_far = SEG_LAST + 30;
+
+    /* What stands on the road, each drawn once the road up to one segment in front of it is drawn */
+    Event ev[512];
     int nev = 0;
-    for (int n = (int)floor(s_far); n > s_near && nev < 60; n--) {
-        if (n - v->pos > 0 && n - v->pos <= OBJ_ROWS && !(trk(TRK_C, n) & 4))
-            ev[nev++] = (Event){ n - 1.0, EV_OBJECTS, n };
-        if (v->town) ev[nev++] = (Event){ n - 1.0 + 1e-6, EV_BLOCK_END, n };
-    }
-    if (!v->town) ev[nev++] = (Event){ v->opp_pos - 1.0, EV_OPPONENT, 0 };
-    qsort(ev, (size_t)nev, sizeof ev[0], event_cmp);
-    int e = 0;
+    int max_seg = v->town ? 179 : (DSS(DS_race_type) == 0 ? 0x17C : SEG_LAST);
+    int obj_dist = enh_opt.draw_distance;
 
-    double sb = s_far;
-    double s = floor(s_far * SLICES) / SLICES;
-    if (s >= sb) s -= 1.0 / SLICES;
-    while (sb > s_near) {
-        while (e < nev && ev[e].key >= sb) draw_event(&c, v, &ev[e++]);
-        double sa = s > s_near ? s : s_near;
-        draw_slice(&c, sa, sb, v->town);
-        sb = sa;
-        s -= 1.0 / SLICES;
+    for (int n = (int)floor(s_far); n > s_near && nev < 500; n--) {
+        if (n <= max_seg && n - v->pos > 0 && n - v->pos <= obj_dist && !(trk(TRK_C, n) & 4))
+            ev[nev++] = (Event){ n - 1.0, EV_OBJECTS, n };
+        if (v->town && n <= max_seg) ev[nev++] = (Event){ n - 1.0 + 1e-6, EV_BLOCK_END, n };
     }
+    if (!v->town && (v->opp_pos - v->pos) <= enh_opt.draw_distance && (v->opp_pos - v->pos) >= -1.0) {
+        if (nev < 512) ev[nev++] = (Event){ v->opp_pos - 1.0, EV_OPPONENT, 0 };
+    }
+    qsort(ev, (size_t)nev, sizeof ev[0], event_cmp);
+
+    /* slices far to near on an adaptive grid (always on the 1/8 grid, so that the events fall on slice
+     * edges), from the draw distance to just in front of the eye; consecutive slices share their edges */
+    Slice sl[MAX_SLICES];
+    int ns = 0;
+    double sb = s_far;
+    while (sb > s_near && ns < MAX_SLICES) {
+        double dist = sb - v->pos;
+        double step = dist > 30.0 ? 1.0 : (dist > 15.0 ? 0.5 : (1.0 / SLICES));
+        double s = floor(sb / step) * step;
+        if (s >= sb - 1e-6) s -= step;
+        double sa = s > s_near ? s : s_near;
+        Slice *q = &sl[ns++];
+        Row ra = row_at(&c, sa), rb = row_at(&c, sb);
+        q->sa = sa;
+        q->sb = sb;
+        q->ya = py(&ra, Y_ROAD);
+        q->yb = py(&rb, Y_ROAD);
+        if (sa <= c.pos - 0.24 && q->ya < 105.0) q->ya = 105.0;   /* the nearest reaches under the hood */
+        q->front = q->yb < q->ya - 1e-6;
+        q->ground = true;
+        sb = sa;
+    }
+    slices_ground(sl, ns, ENH_VIEW_Y1, v->town ? COL_ROAD : COL_GRASS);
+
+    const double box[4] = { 0, ENH_VIEW_Y0, 320, ENH_VIEW_Y1 };
+    double clip_cur = ENH_VIEW_Y1;
+    int e = 0;
+    for (int i = 0; i < ns; i++) {
+        if (e < nev && ev[e].key >= sl[i].sb) {
+            clip_occ(box, occ_before(&sl[i]), &clip_cur);
+            while (e < nev && ev[e].key >= sl[i].sb) draw_event(&c, v, &ev[e++]);
+        }
+        if (!sl[i].front) continue;
+        clip_occ(box, sl[i].occ < sl[i].ya - 1e-6 ? sl[i].occ : ENH_VIEW_Y1, &clip_cur);
+        draw_slice(&c, &sl[i], v->town);
+    }
+    clip_occ(box, ENH_VIEW_Y1, &clip_cur);
     while (e < nev) draw_event(&c, v, &ev[e++]);
     draw_mirror(&c, v);
 }
